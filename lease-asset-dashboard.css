@@ -230,6 +230,18 @@ body:has(#leaseDashboard) {
 .lease-renewals-table { min-width: 900px; max-height: 360px; }
 .lease-renewals-table-wrap { max-height: 360px; }
 
+/* GridTable sets an explicit pixel width on the table equal to the sum of
+   its (content-estimated) column widths — on a wide card that total can be
+   much narrower than the card itself, leaving a big blank gap on the right
+   ("cutting off" look). Matches service-dashboard.css's identical override
+   for .servdash-table: fill the panel on wide screens; min-width still lets
+   the table grow past 100% (and scroll) once columns are manually resized
+   wider than the panel. */
+.lease-renewals-table[data-gt-resizable] {
+  width: 100% !important;
+  min-width: max-content !important;
+}
+
 /* Sort/resize visuals (sort glyph, resize handle) are fully generic in the
    latest global.css now — table th .gt-sort-icon / .gt-col-resizer apply to
    any <table>, not just page-specific classes — so nothing page-specific is

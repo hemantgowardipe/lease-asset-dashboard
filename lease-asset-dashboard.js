@@ -144,35 +144,54 @@
     return [];
   }
 
+  function looksLikeFlatBucketRow(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+    var keys = Object.keys(obj);
+    if (!keys.length) return false;
+    return keys.every(function (k) {
+      var v = obj[k];
+      return typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)));
+    });
+  }
+
+  function flattenBucketRow(obj, workflowName) {
+    var keys = Object.keys(obj);
+    console.info('[lease-dashboard] ' + (workflowName || '') +
+      ' response is a flat bucket object (every property is a plain number) — treating each key as its own row: ' +
+      JSON.stringify(keys));
+    return keys.map(function (k) { return { __flatKey: k, __flatValue: obj[k] }; });
+  }
+
   /**
-   * extractRows() only handles the "array of records" envelope. Some
-   * workflows (Lease Ageing was the one that surfaced this) return a FLAT
-   * object instead — e.g. { Overdue: 5, "Due0to30": 6, ... } rather than
-   * [{ Bucket: "Overdue", Count: 5 }, ...]. When extractRows() finds
-   * nothing, this falls back to treating every own-property of the object
-   * whose value is a plain number (or numeric string) as one row, so a
-   * flat bucket→count style response still renders instead of silently
-   * showing "no records" despite the API genuinely returning data. Logs
-   * which path it took so this is visible in the console rather than a
-   * silent guess.
+   * extractRows() only handles the "array of records" envelope. Two related
+   * shapes fall through it and need special-casing (both confirmed against
+   * real responses — Lease Ageing returns the first one):
+   *
+   *   1. An array containing exactly ONE flat object, each of whose own
+   *      properties IS a bucket:
+   *      [{ "Overdue": 0, "Due in 0-30d": 2, "Due in 31-60d": 0, ... }]
+   *      extractRows() happily returns this as a length-1 "rows" array, so
+   *      without this check the dashboard renders exactly one bogus row
+   *      with no recognizable Bucket/Count field on it.
+   *
+   *   2. The same, but not array-wrapped at all:
+   *      { "Overdue": 0, "Due in 0-30d": 2, ... }
+   *
+   * Either way, nothing here invents a number — every value rendered is
+   * read straight off the object's own properties, including genuine
+   * zeros. Logs which path it took so this is visible in the console
+   * rather than a silent guess.
    */
   function extractRowsFlexible(payload, workflowName) {
     var rows = extractRows(payload);
+    if (rows.length === 1 && looksLikeFlatBucketRow(rows[0])) {
+      return flattenBucketRow(rows[0], workflowName);
+    }
     if (rows.length) return rows;
-    if (Array.isArray(payload) || !payload || typeof payload !== 'object') return [];
-
-    var keys = Object.keys(payload).filter(function (k) {
-      var v = payload[k];
-      if (v == null) return false;
-      if (typeof v === 'number') return true;
-      if (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))) return true;
-      return false;
-    });
-    if (!keys.length) return [];
-    console.info('[lease-dashboard] ' + (workflowName || '') +
-      ' response was a flat object, not an array — treating each key as a row (' + JSON.stringify(keys) + '). ' +
-      'If this mapping looks wrong, check the raw response logged above.');
-    return keys.map(function (k) { return { __flatKey: k, __flatValue: payload[k] }; });
+    if (looksLikeFlatBucketRow(payload)) {
+      return flattenBucketRow(payload, workflowName);
+    }
+    return [];
   }
 
   function humanizeKey(k) {
@@ -386,7 +405,8 @@
         count: toNumber(pickField(r, ['Count', 'AssetCount'], WORKFLOWS.statusMix), 0)
       };
     });
-    var total = items.reduce(function (a, i) { return a + i.count; }, 0) || 1;
+    var total = items.reduce(function (a, i) { return a + i.count; }, 0);
+    var denom = total || 1; // only for the arc-length fraction below — never displayed
     var C = 2 * Math.PI * 60;
     var acc = 0;
     var svgNs = 'http://www.w3.org/2000/svg';
@@ -396,8 +416,8 @@
       .filter(Boolean);
 
     ordered.forEach(function (item) {
-      if (!item.count) return;
-      var frac = item.count / total;
+      if (!item.count) return; // a 0-count status draws no arc/legend row — nothing to show
+      var frac = item.count / denom;
       var len = frac * C;
       var circle = document.createElementNS(svgNs, 'circle');
       circle.setAttribute('class', 'lease-status-seg');
@@ -595,6 +615,22 @@
     if (values.indexOf(current) !== -1) selectEl.value = current;
   }
 
+  /**
+   * ASSET_VALUE_FILTER's response may arrive as a bare object, or (per the
+   * same array-wrapped-single-object convention Lease Ageing turned out to
+   * use) as a one-element array containing that object. Unwraps either
+   * shape into the plain object pickField() expects — never fabricates a
+   * dropdown option, just makes sure a genuinely-returned object isn't
+   * discarded purely because of how it's wrapped.
+   */
+  function unwrapSingleObject(payload) {
+    if (Array.isArray(payload)) {
+      return (payload.length && payload[0] && typeof payload[0] === 'object') ? payload[0] : {};
+    }
+    if (payload && typeof payload === 'object') return payload;
+    return {};
+  }
+
   async function loadFilterValues() {
     var payload;
     try {
@@ -603,13 +639,21 @@
       console.error('[lease-dashboard] ' + FILTER_VALUES_WORKFLOW + ' failed:', err);
       return; // filters just stay at "All" — no fabricated options
     }
-    var obj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-    var deptVals = pickField(obj, ['Departments', 'Department'], FILTER_VALUES_WORKFLOW);
-    var locVals = pickField(obj, ['Locations', 'Location'], FILTER_VALUES_WORKFLOW);
-    var vendorVals = pickField(obj, ['Vendors', 'Vendor'], FILTER_VALUES_WORKFLOW);
-    var categoryVals = pickField(obj, ['Categories', 'Category'], FILTER_VALUES_WORKFLOW);
-    var assetTypeVals = pickField(obj, ['AssetTypes', 'AssetType'], FILTER_VALUES_WORKFLOW);
+    var obj = unwrapSingleObject(payload);
+    console.debug('[lease-dashboard] ' + FILTER_VALUES_WORKFLOW + ' resolved object keys:', Object.keys(obj));
 
+    var deptVals = pickField(obj, ['Departments', 'Department', 'DepartmentList', 'DeptList'], FILTER_VALUES_WORKFLOW);
+    var locVals = pickField(obj, ['Locations', 'Location', 'LocationList'], FILTER_VALUES_WORKFLOW);
+    var vendorVals = pickField(obj, ['Vendors', 'Vendor', 'VendorList', 'Lessor', 'Lessors'], FILTER_VALUES_WORKFLOW);
+    var categoryVals = pickField(obj, ['Categories', 'Category', 'CategoryList'], FILTER_VALUES_WORKFLOW);
+    var assetTypeVals = pickField(obj, ['AssetTypes', 'AssetType', 'AssetTypeList'], FILTER_VALUES_WORKFLOW);
+
+    // Each dropdown is populated ONLY from its own matched field — Department
+    // never falls through to Location's values, etc. — and only if the
+    // field actually resolved to an array (pickField already logs a warning
+    // per-field above when nothing on the response matches its candidate
+    // names, so a dropdown silently staying "All" is diagnosable from the
+    // console rather than a mystery).
     if (Array.isArray(deptVals)) populateSelect(document.getElementById('fDepartment'), deptVals);
     if (Array.isArray(locVals)) populateSelect(document.getElementById('fLocation'), locVals);
     if (Array.isArray(vendorVals)) populateSelect(document.getElementById('fVendor'), vendorVals);
