@@ -252,17 +252,33 @@
   // Filter state
   // ------------------------------------------------------------------
 
+  // Date range stays exactly as before (spec: 7/30/90/Custom, default 7,
+  // never "All"). Everything else — AssetType/Category/Location/Department/
+  // Vendor — is driven by the searchable-combobox fields below, ported
+  // from Asset Value Dashboard's filter funnel.
+  var dateFilter = { rangeValue: '7', from: '', to: '' };
+
+  var FILTER_KEYS = ['AssetType', 'Category', 'Location', 'Department', 'Vendor'];
+  var FILTER_FIELD_IDS = {
+    AssetType: 'filterAssetType',
+    Category: 'filterCategory',
+    Location: 'filterLocation',
+    Department: 'filterDepartment',
+    Vendor: 'filterVendor'
+  };
+  var FILTER_PLACEHOLDER = 'Select to apply';
+
+  // Raw rows from ASSET_VALUE_FILTER, each expected to look like
+  // { FilterType: "Department"|"Location"|"Vendor"|"Category"|"AssetType",
+  //   FilterValue: "<option text>", Type: "<asset type, Category rows only>" }
+  // — same shape Asset Value Dashboard's own ASSET_VALUE_FILTER uses.
+  var filterRows = [];
+  var filterDropdownOptions = { AssetType: [], Category: [], Location: [], Department: [], Vendor: [] };
+
+  // Currently APPLIED values (only updated by Apply/Clear) — "" means "All".
+  var selected = { AssetType: '', Category: '', Location: '', Department: '', Vendor: '' };
+
   var state = {
-    filter: {
-      rangeValue: '7', // '7' | '30' | '90' | 'custom' — spec: default is 7 Days, never "All"
-      from: '',
-      to: '',
-      department: 'All',
-      location: 'All',
-      vendor: 'All',
-      category: 'All',
-      assetType: 'All'
-    },
     renewTab: 'upcoming',
     renewRowsRaw: [], // last-fetched Lease Asset Renewals rows, for client-side tab filtering
     gridInstance: null
@@ -282,16 +298,18 @@
     return { StartDate: toIsoDate(start), EndDate: toIsoDate(today) };
   }
 
-  function buildArgs(filter) {
-    var range = calcDateRange(filter);
+  // selected.Category / selected.AssetType / etc. hold the API's true
+  // FilterValue strings; "" means "All" was picked (or nothing was picked).
+  function buildArgs() {
+    var range = calcDateRange(dateFilter);
     return {
       StartDate: range.StartDate,
       EndDate: range.EndDate,
-      CategoryFilter: filter.category || 'All',
-      AssetTypeFilter: filter.assetType || 'All',
-      DepartmentFilter: filter.department || 'All',
-      VendorFilter: filter.vendor || 'All',
-      LocationFilter: filter.location || 'All'
+      CategoryFilter: selected.Category || 'All',
+      AssetTypeFilter: selected.AssetType || 'All',
+      DepartmentFilter: selected.Department || 'All',
+      VendorFilter: selected.Vendor || 'All',
+      LocationFilter: selected.Location || 'All'
     };
   }
 
@@ -334,12 +352,11 @@
     document.getElementById('kpiCostSub').textContent = costSub || '';
   }
 
-  function renderBars(containerEl, payload, fillColor, workflowName, totalsEls) {
+  function renderBars(containerEl, payload, fillColor, workflowName) {
     var rows = extractRowsFlexible(payload, workflowName);
     containerEl.innerHTML = '';
     if (!rows.length) {
       containerEl.innerHTML = '<div class="text-muted" style="font-size:12px">No records for the current filters.</div>';
-      if (totalsEls) { totalsEls.count.textContent = '0'; totalsEls.value.textContent = fmtCur(0); }
       return;
     }
     var items = rows.map(function (r) {
@@ -347,8 +364,8 @@
         return { label: humanizeKey(r.__flatKey), count: toNumber(r.__flatValue, 0), value: 0 };
       }
       var label = pickField(r, ['Department', 'Location', 'Label', 'Name', 'Group'], workflowName);
-      var count = toNumber(pickField(r, ['Count', 'AssetCount', 'Total'], workflowName), 0);
-      var value = toNumber(pickField(r, ['MonthlyValue', 'MonthlyRent', 'Value'], workflowName), 0);
+      var count = toNumber(pickField(r, ['Count', 'AssetCount', 'Asset Count', 'Total'], workflowName), 0);
+      var value = toNumber(pickField(r, ['Total Lease Amount', 'TotalLeaseAmount', 'MonthlyValue', 'MonthlyRent', 'Amount', 'Value'], workflowName), 0);
       return { label: label, count: count, value: value };
     });
     var max = Math.max.apply(null, items.map(function (i) { return i.count || i.value || 0; }).concat([1]));
@@ -361,17 +378,10 @@
       row.innerHTML =
         '<div class="label">' + escapeHtml(item.label || '—') + '</div>' +
         '<div class="track"><div class="fill" style="width:' + pct + '%;background:' + fillColor + '"></div></div>' +
-        '<div class="value">' + item.count + (item.value ? ' \u00B7 ' + fmtCur(item.value) : '') + '</div>';
+        '<div class="value">' + item.count + ' \u00B7 ' + fmtCur(item.value) + '</div>';
       frag.appendChild(row);
     });
     containerEl.appendChild(frag);
-
-    if (totalsEls) {
-      var totalCount = items.reduce(function (a, i) { return a + toNumber(i.count, 0); }, 0);
-      var totalValue = items.reduce(function (a, i) { return a + toNumber(i.value, 0); }, 0);
-      totalsEls.count.textContent = String(totalCount);
-      totalsEls.value.textContent = fmtCur(totalValue);
-    }
   }
 
   var STATUS_COLORS = {
@@ -604,61 +614,266 @@
   }
 
   // ------------------------------------------------------------------
-  // Filter drawer population (ASSET_VALUE_FILTER)
+  // Filter funnel — searchable combobox fields, ported from Asset Value
+  // Dashboard's own implementation (same .hmt-filter-select-wrap contract:
+  // input + hidden value + options menu). FILTER_KEYS/FILTER_FIELD_IDS
+  // above drive every loop below.
   // ------------------------------------------------------------------
 
-  function populateSelect(selectEl, values) {
-    if (!values || !values.length) return; // spec: don't invent options that weren't returned
-    var current = selectEl.value;
-    selectEl.innerHTML = '<option value="All">All</option>' +
-      values.map(function (v) { return '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'; }).join('');
-    if (values.indexOf(current) !== -1) selectEl.value = current;
+  function normalizeKey(key) {
+    return String(key == null ? '' : key).trim().toLowerCase().replace(/[\s_-]+/g, '');
+  }
+
+  function getFieldLoose(row, candidates) {
+    if (!row || typeof row !== 'object') return null;
+    var normalized = {};
+    Object.keys(row).forEach(function (k) { normalized[normalizeKey(k)] = row[k]; });
+    for (var i = 0; i < candidates.length; i++) {
+      var nk = normalizeKey(candidates[i]);
+      if (Object.prototype.hasOwnProperty.call(normalized, nk)) return normalized[nk];
+    }
+    return null;
+  }
+
+  function uniqueSorted(values) {
+    var seen = {}, out = [];
+    values.forEach(function (v) {
+      var t = String(v == null ? '' : v).trim();
+      if (!t || seen[t]) return;
+      seen[t] = true;
+      out.push(t);
+    });
+    return out.sort(function (a, b) { return String(a).localeCompare(String(b), undefined, { sensitivity: 'base' }); });
+  }
+
+  function rowsByFilterType(type) {
+    return filterRows.filter(function (r) { return normalizeKey(getFieldLoose(r, ['FilterType'])) === normalizeKey(type); });
+  }
+
+  // "Asset Type" options come from the Type tag found inside Category rows
+  // plus any rows directly tagged FilterType=AssetType — same contract as
+  // Asset Value Dashboard's ASSET_VALUE_FILTER.
+  function getAssetTypeOptions() {
+    var categoryRows = rowsByFilterType('Category');
+    var fromType = categoryRows.map(function (r) { return getFieldLoose(r, ['Type']); });
+    var directRows = rowsByFilterType('AssetType');
+    var fromDirect = directRows.map(function (r) { return getFieldLoose(r, ['FilterValue']); });
+    return uniqueSorted(fromType.concat(fromDirect));
+  }
+
+  // Category is scoped to whichever Asset Type is selected — live in the
+  // popup, not just the last-applied value, so the list updates immediately
+  // as the user picks a different Asset Type, before Apply is clicked.
+  function getCategoryOptions(assetType) {
+    var categoryRows = rowsByFilterType('Category');
+    var scoped = (!assetType || assetType === 'All')
+      ? categoryRows
+      : categoryRows.filter(function (r) { return normalizeKey(getFieldLoose(r, ['Type'])) === normalizeKey(assetType); });
+    return uniqueSorted(scoped.map(function (r) { return getFieldLoose(r, ['FilterValue']); }));
+  }
+
+  function getSimpleOptions(filterType) {
+    return uniqueSorted(rowsByFilterType(filterType).map(function (r) { return getFieldLoose(r, ['FilterValue']); }));
+  }
+
+  function getOptionsForFilterKey(key) {
+    if (key === 'AssetType') return getAssetTypeOptions();
+    if (key === 'Category') {
+      var dd = getFilterDropdownElements('AssetType');
+      var liveAssetType = (dd && dd.hidden && dd.hidden.value) ? dd.hidden.value : (selected.AssetType || 'All');
+      return getCategoryOptions(liveAssetType);
+    }
+    if (key === 'Location' || key === 'Department' || key === 'Vendor') return getSimpleOptions(key);
+    return [];
+  }
+
+  function getFilterDropdownElements(key) {
+    var baseId = FILTER_FIELD_IDS[key];
+    if (!baseId) return null;
+    return {
+      hidden: document.getElementById(baseId),
+      input: document.getElementById(baseId + 'Input'),
+      menu: document.getElementById(baseId + 'Menu'),
+      wrap: document.querySelector('.hmt-filter-select-wrap[data-filter-key="' + key + '"]')
+    };
+  }
+
+  function syncFilterDropdownInput(key) {
+    var dd = getFilterDropdownElements(key);
+    if (!dd || !dd.hidden || !dd.input) return;
+    dd.input.value = dd.hidden.value ? dd.hidden.value : '';
+  }
+
+  function setFilterDropdownValue(key, value, label) {
+    var dd = getFilterDropdownElements(key);
+    if (!dd || !dd.hidden || !dd.input || !dd.menu) return;
+    var safeValue = value ? String(value).trim() : '';
+    var safeLabel = safeValue ? String(label || value).trim() : '';
+    dd.hidden.value = safeValue;
+    dd.input.value = safeLabel;
+    dd.menu.querySelectorAll('.as-filter-select-option[role="option"]').forEach(function (option) {
+      var optionValue = option.getAttribute('data-value') || '';
+      option.classList.toggle('is-selected', optionValue === safeValue);
+    });
+  }
+
+  function clearFilterFieldValue(key) { setFilterDropdownValue(key, '', ''); }
+
+  function renderFilterDropdownMenu(key) {
+    var dd = getFilterDropdownElements(key);
+    if (!dd || !dd.menu) return;
+    var options = filterDropdownOptions[key] || [];
+    var currentValue = dd.hidden ? (dd.hidden.value || '') : '';
+    var menuId = dd.menu.id;
+
+    dd.menu.innerHTML =
+      '<button type="button" class="as-filter-select-option' + (!currentValue ? ' is-selected' : '') +
+      '" role="option" data-filter-key="' + escapeHtml(key) + '" data-value="" data-label="' +
+      escapeHtml(FILTER_PLACEHOLDER) + '">' + escapeHtml(FILTER_PLACEHOLDER) + '</button>' +
+      options.map(function (optionValue) {
+        var isSelected = currentValue === optionValue;
+        return '<button type="button" class="as-filter-select-option' + (isSelected ? ' is-selected' : '') +
+          '" role="option" data-filter-key="' + escapeHtml(key) + '" data-value="' + escapeHtml(optionValue) +
+          '" data-label="' + escapeHtml(optionValue) + '">' + escapeHtml(optionValue) + '</button>';
+      }).join('') +
+      '<p class="as-filter-select-empty" hidden>No matching options</p>';
+
+    if (dd.input) dd.input.setAttribute('aria-controls', menuId);
+    syncFilterDropdownInput(key);
+  }
+
+  function filterOptionMatchesQuery(label, query) {
+    var term = String(query || '').trim().toLowerCase();
+    if (!term) return true;
+    return String(label || '').toLowerCase().indexOf(term) >= 0;
+  }
+
+  function applyFilterDropdownSearch(wrap, query) {
+    if (!wrap) return;
+    var menu = wrap.querySelector('.hmt-filter-select-menu');
+    if (!menu) return;
+    var hasQuery = String(query || '').trim().length > 0;
+    var visibleCount = 0;
+    menu.querySelectorAll('.as-filter-select-option[role="option"]').forEach(function (optionEl) {
+      var isPlaceholder = !(optionEl.getAttribute('data-value') || '');
+      var label = optionEl.getAttribute('data-label') || optionEl.textContent;
+      var matches = filterOptionMatchesQuery(label, query);
+      if (isPlaceholder && hasQuery) matches = false;
+      optionEl.hidden = !matches;
+      optionEl.classList.toggle('is-filter-hidden', !matches);
+      if (matches) visibleCount += 1;
+    });
+    var emptyEl = menu.querySelector('.as-filter-select-empty');
+    if (emptyEl) emptyEl.hidden = visibleCount > 0;
+  }
+
+  function resetFilterDropdownSearch(wrap) { applyFilterDropdownSearch(wrap, ''); }
+
+  function closeAllFilterDropdownMenus() {
+    document.querySelectorAll('.filter-funnel-popup .hmt-filter-select-menu').forEach(function (menu) { menu.hidden = true; });
+    document.querySelectorAll('.filter-funnel-popup .hmt-filter-select-input').forEach(function (input) { input.setAttribute('aria-expanded', 'false'); });
+    document.querySelectorAll('.filter-funnel-popup .hmt-filter-select-wrap').forEach(function (wrap) { wrap.classList.remove('is-open'); });
+  }
+
+  function openFilterDropdownMenu(input) {
+    var wrap = input.closest('.hmt-filter-select-wrap');
+    var menu = wrap && wrap.querySelector('.hmt-filter-select-menu');
+    if (!wrap || !menu) return;
+    closeAllFilterDropdownMenus();
+    menu.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+    wrap.classList.add('is-open');
+    resetFilterDropdownSearch(wrap);
+  }
+
+  function bindFilterDropdownUi() {
+    var popup = document.getElementById('filterFunnelPopup');
+    if (!popup || popup.__filterDropdownBound) return;
+    popup.__filterDropdownBound = true;
+
+    popup.querySelectorAll('.hmt-filter-select-input').forEach(function (input) {
+      input.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var wrap = input.closest('.hmt-filter-select-wrap');
+        var menu = wrap && wrap.querySelector('.hmt-filter-select-menu');
+        if (menu && menu.hidden) openFilterDropdownMenu(input);
+      });
+      input.addEventListener('focus', function () { openFilterDropdownMenu(input); });
+      input.addEventListener('input', function () {
+        var wrap = input.closest('.hmt-filter-select-wrap');
+        if (!wrap) return;
+        var menu = wrap.querySelector('.hmt-filter-select-menu');
+        if (menu && menu.hidden) openFilterDropdownMenu(input);
+        applyFilterDropdownSearch(wrap, input.value);
+      });
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { event.preventDefault(); closeAllFilterDropdownMenus(); input.blur(); }
+      });
+    });
+
+    popup.addEventListener('click', function (event) {
+      var option = event.target.closest('.as-filter-select-option[role="option"]');
+      if (!option) return;
+      event.stopPropagation();
+      var key = option.getAttribute('data-filter-key');
+      if (!key) return;
+      var value = option.getAttribute('data-value') || '';
+      var label = option.getAttribute('data-label') || value;
+      setFilterDropdownValue(key, value, value ? label : '');
+      closeAllFilterDropdownMenus();
+
+      // Asset Type changed → Category's option list is scoped to it, so
+      // reset and re-render Category immediately (before Apply is clicked).
+      if (key === 'AssetType') {
+        clearFilterFieldValue('Category');
+        filterDropdownOptions.Category = getOptionsForFilterKey('Category');
+        renderFilterDropdownMenu('Category');
+      }
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!event.target.closest('.filter-funnel-popup .hmt-filter-select-wrap')) closeAllFilterDropdownMenus();
+    });
+  }
+
+  function syncFilterDropdown(key) {
+    var options = getOptionsForFilterKey(key);
+    filterDropdownOptions[key] = options;
+    var dd = getFilterDropdownElements(key);
+    if (dd && dd.hidden) dd.hidden.value = (selected[key] && options.indexOf(selected[key]) !== -1) ? selected[key] : '';
+    renderFilterDropdownMenu(key);
+  }
+
+  function populateFilterDropdowns() {
+    FILTER_KEYS.forEach(function (key) { syncFilterDropdown(key); });
   }
 
   /**
-   * ASSET_VALUE_FILTER's response may arrive as a bare object, or (per the
+   * ASSET_VALUE_FILTER's response may arrive as a bare array, or (per the
    * same array-wrapped-single-object convention Lease Ageing turned out to
-   * use) as a one-element array containing that object. Unwraps either
-   * shape into the plain object pickField() expects — never fabricates a
-   * dropdown option, just makes sure a genuinely-returned object isn't
-   * discarded purely because of how it's wrapped.
+   * use elsewhere on this dashboard) wrapped differently. extractRowsFlexible
+   * already handles both without discarding a genuinely-returned array —
+   * unlike a naive "if it's an array, ignore it" check, which was the
+   * actual bug here previously.
    */
-  function unwrapSingleObject(payload) {
-    if (Array.isArray(payload)) {
-      return (payload.length && payload[0] && typeof payload[0] === 'object') ? payload[0] : {};
-    }
-    if (payload && typeof payload === 'object') return payload;
-    return {};
-  }
-
   async function loadFilterValues() {
     var payload;
     try {
       payload = await callRnsp(FILTER_VALUES_WORKFLOW, {});
     } catch (err) {
       console.error('[lease-dashboard] ' + FILTER_VALUES_WORKFLOW + ' failed:', err);
-      return; // filters just stay at "All" — no fabricated options
+      filterRows = [];
+      populateFilterDropdowns();
+      return; // filters just stay empty ("All") — no fabricated options
     }
-    var obj = unwrapSingleObject(payload);
-    console.debug('[lease-dashboard] ' + FILTER_VALUES_WORKFLOW + ' resolved object keys:', Object.keys(obj));
-
-    var deptVals = pickField(obj, ['Departments', 'Department', 'DepartmentList', 'DeptList'], FILTER_VALUES_WORKFLOW);
-    var locVals = pickField(obj, ['Locations', 'Location', 'LocationList'], FILTER_VALUES_WORKFLOW);
-    var vendorVals = pickField(obj, ['Vendors', 'Vendor', 'VendorList', 'Lessor', 'Lessors'], FILTER_VALUES_WORKFLOW);
-    var categoryVals = pickField(obj, ['Categories', 'Category', 'CategoryList'], FILTER_VALUES_WORKFLOW);
-    var assetTypeVals = pickField(obj, ['AssetTypes', 'AssetType', 'AssetTypeList'], FILTER_VALUES_WORKFLOW);
-
-    // Each dropdown is populated ONLY from its own matched field — Department
-    // never falls through to Location's values, etc. — and only if the
-    // field actually resolved to an array (pickField already logs a warning
-    // per-field above when nothing on the response matches its candidate
-    // names, so a dropdown silently staying "All" is diagnosable from the
-    // console rather than a mystery).
-    if (Array.isArray(deptVals)) populateSelect(document.getElementById('fDepartment'), deptVals);
-    if (Array.isArray(locVals)) populateSelect(document.getElementById('fLocation'), locVals);
-    if (Array.isArray(vendorVals)) populateSelect(document.getElementById('fVendor'), vendorVals);
-    if (Array.isArray(categoryVals)) populateSelect(document.getElementById('fCategory'), categoryVals);
-    if (Array.isArray(assetTypeVals)) populateSelect(document.getElementById('fAssetType'), assetTypeVals);
+    filterRows = extractRowsFlexible(payload, FILTER_VALUES_WORKFLOW).filter(function (r) {
+      return r && typeof r === 'object' && !Object.prototype.hasOwnProperty.call(r, '__flatKey');
+    });
+    console.debug('[lease-dashboard] ' + FILTER_VALUES_WORKFLOW + ' rows:', filterRows);
+    if (!filterRows.length) {
+      console.warn('[lease-dashboard] ' + FILTER_VALUES_WORKFLOW + ' returned no usable rows — every dropdown will stay on "All". Check the raw response logged above (each row is expected to carry a FilterType + FilterValue, e.g. { "FilterType": "Department", "FilterValue": "IT Department" }).');
+    }
+    populateFilterDropdowns();
   }
 
   // ------------------------------------------------------------------
@@ -666,20 +881,19 @@
   // ------------------------------------------------------------------
 
   function updateFilterSummary() {
-    var f = state.filter;
     var chips = [];
-    ['department', 'location', 'vendor', 'category', 'assetType'].forEach(function (k) {
-      if (f[k] && f[k] !== 'All') chips.push(f[k]);
-    });
-    var rangeLabel = f.rangeValue === 'custom' ? (f.from || f.to ? f.from + ' \u2192 ' + f.to : 'Custom') : f.rangeValue + ' Days';
+    FILTER_KEYS.forEach(function (k) { if (selected[k]) chips.push(selected[k]); });
+    var rangeLabel = dateFilter.rangeValue === 'custom'
+      ? (dateFilter.from || dateFilter.to ? dateFilter.from + ' \u2192 ' + dateFilter.to : 'Custom')
+      : dateFilter.rangeValue + ' Days';
     chips.push(rangeLabel);
     var el = document.getElementById('filterSummary');
     el.textContent = 'Filtered: ' + chips.join(' \u00B7 ');
-    el.classList.toggle('has-filters', chips.length > 1 || f.rangeValue !== '7');
+    el.classList.toggle('has-filters', chips.length > 1 || dateFilter.rangeValue !== '7');
   }
 
   async function loadDashboardData() {
-    var args = buildArgs(state.filter);
+    var args = buildArgs();
     updateFilterSummary();
 
     var jobs = [
@@ -688,17 +902,11 @@
       { name: WORKFLOWS.ageing, run: renderAgeing, container: document.getElementById('ageingBars') },
       { name: WORKFLOWS.renewals, run: renderRenewals, container: document.getElementById('renewalsGridWrap') },
       {
-        name: WORKFLOWS.department, run: function (p) {
-          renderBars(document.getElementById('deptBars'), p, '#2563eb', WORKFLOWS.department,
-            { count: document.getElementById('deptTotalAssets'), value: document.getElementById('deptTotalRent') });
-        },
+        name: WORKFLOWS.department, run: function (p) { renderBars(document.getElementById('deptBars'), p, '#2563eb', WORKFLOWS.department); },
         container: document.getElementById('deptBars')
       },
       {
-        name: WORKFLOWS.location, run: function (p) {
-          renderBars(document.getElementById('locBars'), p, '#8b7cf6', WORKFLOWS.location,
-            { count: document.getElementById('locTotalAssets'), value: document.getElementById('locTotalRent') });
-        },
+        name: WORKFLOWS.location, run: function (p) { renderBars(document.getElementById('locBars'), p, '#8b7cf6', WORKFLOWS.location); },
         container: document.getElementById('locBars')
       }
     ];
@@ -713,57 +921,102 @@
   }
 
   // ------------------------------------------------------------------
-  // Filter drawer wiring
+  // Filter funnel open/close/Apply/Clear — ported from Asset Value
+  // Dashboard's initFilterFunnel(). The Date Range field is this
+  // dashboard's own addition, carried through the same Apply/Clear flow;
+  // everything else here (funnel open/close, commitFilters, the combobox
+  // Clear/Apply wiring) matches the reference implementation.
   // ------------------------------------------------------------------
 
-  function openFilterDrawer() {
-    var f = state.filter;
-    document.getElementById('fDateRange').value = f.rangeValue;
-    document.getElementById('fFrom').value = f.from;
-    document.getElementById('fTo').value = f.to;
-    document.getElementById('fDepartment').value = f.department;
-    document.getElementById('fLocation').value = f.location;
-    document.getElementById('fVendor').value = f.vendor;
-    document.getElementById('fCategory').value = f.category;
-    document.getElementById('fAssetType').value = f.assetType;
-    document.getElementById('customDateFields').style.display = f.rangeValue === 'custom' ? 'flex' : 'none';
-    document.getElementById('filterOverlay').style.display = 'flex';
-  }
-  function closeFilterDrawer() {
-    document.getElementById('filterOverlay').style.display = 'none';
-  }
+  function initFilterFunnel() {
+    var funnelBtn = document.getElementById('filterFunnelBtn');
+    var funnelPopup = document.getElementById('filterFunnelPopup');
+    var funnelBackdrop = document.getElementById('filterFunnelBackdrop');
+    var funnelClose = document.getElementById('filterFunnelClose');
+    var funnelApply = document.getElementById('filterFunnelApply');
+    var funnelClear = document.getElementById('filterFunnelClear');
+    if (!funnelBtn || !funnelPopup) return;
 
-  function wireEvents() {
-    document.getElementById('openFiltersBtn').addEventListener('click', openFilterDrawer);
-    document.getElementById('closeFiltersBtn').addEventListener('click', closeFilterDrawer);
-    document.getElementById('filterOverlay').addEventListener('click', function (e) {
-      if (e.target === e.currentTarget) closeFilterDrawer();
+    bindFilterDropdownUi();
+
+    function openFunnelPopup() {
+      document.getElementById('fDateRange').value = dateFilter.rangeValue;
+      document.getElementById('fFrom').value = dateFilter.from;
+      document.getElementById('fTo').value = dateFilter.to;
+      document.getElementById('customDateFields').style.display = dateFilter.rangeValue === 'custom' ? 'flex' : 'none';
+
+      funnelPopup.hidden = false;
+      funnelBackdrop.hidden = false;
+      funnelBtn.setAttribute('aria-expanded', 'true');
+      funnelBtn.classList.add('is-open');
+    }
+
+    function closeFunnelPopup() {
+      funnelPopup.hidden = true;
+      funnelBackdrop.hidden = true;
+      funnelBtn.setAttribute('aria-expanded', 'false');
+      funnelBtn.classList.remove('is-open');
+      closeAllFilterDropdownMenus();
+    }
+
+    funnelBtn.addEventListener('click', function (event) {
+      event.stopPropagation();
+      if (funnelPopup.hidden) openFunnelPopup(); else closeFunnelPopup();
     });
+
+    // Do NOT stopPropagation() on the whole popup here — a click on blank
+    // popup space (not a dropdown) must still bubble to the document-level
+    // listener in bindFilterDropdownUi() so any open dropdown menu closes.
+    if (funnelClose) funnelClose.addEventListener('click', closeFunnelPopup);
+    if (funnelBackdrop) funnelBackdrop.addEventListener('click', closeFunnelPopup);
 
     document.getElementById('fDateRange').addEventListener('change', function (e) {
       document.getElementById('customDateFields').style.display = e.target.value === 'custom' ? 'flex' : 'none';
     });
 
-    document.getElementById('resetFiltersBtn').addEventListener('click', function () {
-      state.filter = { rangeValue: '7', from: '', to: '', department: 'All', location: 'All', vendor: 'All', category: 'All', assetType: 'All' };
-      closeFilterDrawer();
-      loadDashboardData();
-    });
-
-    document.getElementById('applyFiltersBtn').addEventListener('click', function () {
-      state.filter = {
+    function commitFilters() {
+      FILTER_KEYS.forEach(function (key) {
+        var dd = getFilterDropdownElements(key);
+        selected[key] = (dd && dd.hidden && dd.hidden.value) ? dd.hidden.value : '';
+      });
+      dateFilter = {
         rangeValue: document.getElementById('fDateRange').value,
         from: document.getElementById('fFrom').value,
-        to: document.getElementById('fTo').value,
-        department: document.getElementById('fDepartment').value,
-        location: document.getElementById('fLocation').value,
-        vendor: document.getElementById('fVendor').value,
-        category: document.getElementById('fCategory').value,
-        assetType: document.getElementById('fAssetType').value
+        to: document.getElementById('fTo').value
       };
-      closeFilterDrawer();
-      loadDashboardData(); // spec: re-call the six workflows, never reload the page
+    }
+
+    if (funnelApply) {
+      funnelApply.addEventListener('click', function () {
+        commitFilters();
+        closeFunnelPopup();
+        loadDashboardData(); // spec: re-call the six workflows, never reload the page
+      });
+    }
+
+    if (funnelClear) {
+      funnelClear.addEventListener('click', function () {
+        FILTER_KEYS.forEach(clearFilterFieldValue);
+        FILTER_KEYS.forEach(function (key) { selected[key] = ''; });
+        filterDropdownOptions.Category = getOptionsForFilterKey('Category');
+        renderFilterDropdownMenu('Category');
+
+        dateFilter = { rangeValue: '7', from: '', to: '' };
+        document.getElementById('fDateRange').value = '7';
+        document.getElementById('fFrom').value = '';
+        document.getElementById('fTo').value = '';
+        document.getElementById('customDateFields').style.display = 'none';
+      });
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (!funnelPopup.hidden) closeFunnelPopup();
     });
+  }
+
+  function wireEvents() {
+    initFilterFunnel();
 
     document.getElementById('renewTabs').addEventListener('click', function (e) {
       var btn = e.target.closest('button[data-tab]');

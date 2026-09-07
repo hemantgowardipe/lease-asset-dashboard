@@ -12,6 +12,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400&display=swap" rel="stylesheet">
 
+<!-- Font Awesome — the .fa fa-filter / fa-angle-down icons used by the
+     filter funnel are assumed to already be available globally in the
+     real host app (same as ServiceDashboard.html's .fa fa-tachometer
+     icons, which also load FontAwesome from somewhere outside that page's
+     own <head>). Included here only so the icons render in a standalone
+     preview of this page. Safe to remove once deployed inside the host. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
 <!-- Existing shared project stylesheet (unmodified). -->
 <link rel="stylesheet" href="css/global.css">
 <!-- Page-specific additions only (see file header for what's added vs. reused). -->
@@ -26,12 +34,11 @@
     <div>
       <h1 class="page-title">Lease Asset Dashboard</h1>
     </div>
-    <div class="lease-dashboard__header-right">
+    <div class="lease-dashboard__header-right avd-header-actions">
       <span class="lease-filter-summary" id="filterSummary">As of &mdash;</span>
-      <button type="button" class="btn--icon toolbar__icon-btn" id="openFiltersBtn" title="Filters" aria-label="Filters">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:#fff">
-          <path d="M4 5h16M7 12h10M10 19h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
+      <button type="button" class="filter-funnel-btn qaf-btn qaf-btn--square qaf-btn--square-inverse"
+        id="filterFunnelBtn" aria-expanded="false" aria-controls="filterFunnelPopup" aria-label="Filter" title="Filter">
+        <i class="fa fa-filter" aria-hidden="true"></i>
       </button>
     </div>
   </header>
@@ -85,13 +92,7 @@
     <div class="card">
       <div class="lease-card-head">
         <h3 class="card-title">Department-wise Lease Assets</h3>
-        <div class="lease-mini-stats">
-          <span class="text-muted">assets &middot; monthly rent</span>
-          <span class="lease-mini-stats__values">
-            <span id="deptTotalAssets">&mdash;</span>
-            <span id="deptTotalRent">&mdash;</span>
-          </span>
-        </div>
+        <span class="text-muted" style="font-size:11px">assets &middot; monthly rent</span>
       </div>
       <div class="lease-bars-list" id="deptBars"></div>
     </div>
@@ -99,13 +100,7 @@
     <div class="card">
       <div class="lease-card-head">
         <h3 class="card-title">Location-wise Lease Assets</h3>
-        <div class="lease-mini-stats">
-          <span class="text-muted">assets &middot; monthly rent</span>
-          <span class="lease-mini-stats__values">
-            <span id="locTotalAssets">&mdash;</span>
-            <span id="locTotalRent">&mdash;</span>
-          </span>
-        </div>
+        <span class="text-muted" style="font-size:11px">assets &middot; monthly rent</span>
       </div>
       <div class="lease-bars-list" id="locBars"></div>
     </div>
@@ -146,60 +141,117 @@
     <div id="renewalsGridWrap" class="table-wrap lease-renewals-table-wrap qaf-scrollbar-10"></div>
   </div>
 
-  <!-- Filter drawer -->
-  <div class="modal-overlay as-filter-modal-overlay" id="filterOverlay" style="display:none;align-items:flex-start;justify-content:flex-end;">
-    <div class="modal-panel as-filter-modal lease-filter-panel" id="filterPanel">
-      <div class="lease-filter-panel__head">
-        <h2 class="section-title">Filters</h2>
-        <button type="button" class="btn--icon toolbar__icon-btn" id="closeFiltersBtn" aria-label="Close" style="border:1px solid var(--color-border-strong);background:transparent;color:var(--color-text-secondary)">&times;</button>
-      </div>
+  <!-- Filter funnel popup — same markup contract as Asset Value Dashboard's
+       filter modal (.as-filter-modal-overlay / .as-filter-modal.hmt-filter-modal),
+       so the popup, its fields and its searchable-combobox dropdowns are
+       styled entirely by global.css. -->
+  <div class="filter-funnel-backdrop as-filter-modal-overlay" id="filterFunnelBackdrop" hidden></div>
+  <div class="filter-funnel-popup as-filter-modal hmt-filter-modal" id="filterFunnelPopup"
+    hidden role="dialog" aria-modal="true" aria-label="Dashboard filters">
+    <div class="filter-funnel-popup__header hmt-filter-modal__head">
+      <h2 class="section-title">Filters</h2>
+      <button type="button" class="filter-funnel-popup__close hmt-filter-close as-filter-close"
+        id="filterFunnelClose" aria-label="Close filters">&times;</button>
+    </div>
+    <div class="filter-funnel-popup__body">
+      <div class="as-filter-fields hmt-filter-fields">
 
-      <div class="lease-filter-field">
-        <label for="fDateRange">Date Range</label>
-        <select id="fDateRange" class="as-filter-select">
-          <option value="7">7 Days</option>
-          <option value="30">30 Days</option>
-          <option value="90">90 Days</option>
-          <option value="custom">Custom</option>
-        </select>
-      </div>
+        <!-- Date Range — kept as-is per spec (7 / 30 / 90 / Custom, default
+             7 Days, never "All"); everything else in this popup is the
+             ported searchable-combobox contract. -->
+        <label class="hmt-filter-field" data-filter-key="dateRange">
+          <span>Date Range</span>
+          <select id="fDateRange" class="as-filter-select">
+            <option value="7">7 Days</option>
+            <option value="30">30 Days</option>
+            <option value="90">90 Days</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
 
-      <div class="lease-filter-custom-dates" id="customDateFields" style="display:none">
-        <div class="lease-filter-field">
-          <label for="fFrom">From</label>
-          <input type="date" id="fFrom" class="as-search-input">
+        <div class="lease-custom-dates" id="customDateFields" style="display:none">
+          <label class="hmt-filter-field" data-filter-key="from">
+            <span>From</span>
+            <input type="date" id="fFrom" class="as-filter-select">
+          </label>
+          <label class="hmt-filter-field" data-filter-key="to">
+            <span>To</span>
+            <input type="date" id="fTo" class="as-filter-select">
+          </label>
         </div>
-        <div class="lease-filter-field">
-          <label for="fTo">To</label>
-          <input type="date" id="fTo" class="as-search-input">
-        </div>
-      </div>
 
-      <div class="lease-filter-field">
-        <label for="fDepartment">Department</label>
-        <select id="fDepartment" class="as-filter-select"><option value="All">All</option></select>
+        <!-- Asset Type -->
+        <label class="hmt-filter-field" data-filter-key="AssetType"> <span>Asset Type</span>
+          <div class="hmt-filter-select-wrap" data-filter-key="AssetType"> <input type="text"
+              id="filterAssetTypeInput"
+              class="as-filter-select as-filter-select-trigger as-filter-select-input hmt-filter-select-input"
+              role="combobox" aria-expanded="false" aria-haspopup="listbox"
+              aria-controls="filterAssetTypeMenu" aria-autocomplete="list" autocomplete="off"
+              spellcheck="false" placeholder="Select to apply"> <i class="fa fa-angle-down qaf-arrow-icon qaf-arrow-icon--overlay" aria-hidden="true"></i> <input type="hidden"
+              id="filterAssetType" value="">
+            <div id="filterAssetTypeMenu" class="as-filter-select-menu hmt-filter-select-menu as-filter-select-panel hmt-filter-select-panel"
+              role="listbox" hidden></div>
+          </div>
+        </label>
+        <!-- Category (scoped to the currently selected Asset Type) -->
+        <label class="hmt-filter-field" data-filter-key="Category"> <span>Category</span>
+          <div class="hmt-filter-select-wrap" data-filter-key="Category"> <input type="text"
+              id="filterCategoryInput"
+              class="as-filter-select as-filter-select-trigger as-filter-select-input hmt-filter-select-input"
+              role="combobox" aria-expanded="false" aria-haspopup="listbox"
+              aria-controls="filterCategoryMenu" aria-autocomplete="list" autocomplete="off"
+              spellcheck="false" placeholder="Select to apply"> <i class="fa fa-angle-down qaf-arrow-icon qaf-arrow-icon--overlay" aria-hidden="true"></i> <input type="hidden"
+              id="filterCategory" value="">
+            <div id="filterCategoryMenu" class="as-filter-select-menu hmt-filter-select-menu as-filter-select-panel hmt-filter-select-panel"
+              role="listbox" hidden></div>
+          </div>
+        </label>
+        <!-- Location -->
+        <label class="hmt-filter-field" data-filter-key="Location"> <span>Location</span>
+          <div class="hmt-filter-select-wrap" data-filter-key="Location"> <input type="text"
+              id="filterLocationInput"
+              class="as-filter-select as-filter-select-trigger as-filter-select-input hmt-filter-select-input"
+              role="combobox" aria-expanded="false" aria-haspopup="listbox"
+              aria-controls="filterLocationMenu" aria-autocomplete="list" autocomplete="off"
+              spellcheck="false" placeholder="Select to apply"> <i class="fa fa-angle-down qaf-arrow-icon qaf-arrow-icon--overlay" aria-hidden="true"></i> <input type="hidden"
+              id="filterLocation" value="">
+            <div id="filterLocationMenu" class="as-filter-select-menu hmt-filter-select-menu as-filter-select-panel hmt-filter-select-panel"
+              role="listbox" hidden></div>
+          </div>
+        </label>
+        <!-- Department -->
+        <label class="hmt-filter-field" data-filter-key="Department"> <span>Department</span>
+          <div class="hmt-filter-select-wrap" data-filter-key="Department"> <input type="text"
+              id="filterDepartmentInput"
+              class="as-filter-select as-filter-select-trigger as-filter-select-input hmt-filter-select-input"
+              role="combobox" aria-expanded="false" aria-haspopup="listbox"
+              aria-controls="filterDepartmentMenu" aria-autocomplete="list" autocomplete="off"
+              spellcheck="false" placeholder="Select to apply"> <i class="fa fa-angle-down qaf-arrow-icon qaf-arrow-icon--overlay" aria-hidden="true"></i> <input type="hidden"
+              id="filterDepartment" value="">
+            <div id="filterDepartmentMenu" class="as-filter-select-menu hmt-filter-select-menu as-filter-select-panel hmt-filter-select-panel"
+              role="listbox" hidden></div>
+          </div>
+        </label>
+        <!-- Vendor -->
+        <label class="hmt-filter-field" data-filter-key="Vendor"> <span>Vendor</span>
+          <div class="hmt-filter-select-wrap" data-filter-key="Vendor"> <input type="text"
+              id="filterVendorInput"
+              class="as-filter-select as-filter-select-trigger as-filter-select-input hmt-filter-select-input"
+              role="combobox" aria-expanded="false" aria-haspopup="listbox"
+              aria-controls="filterVendorMenu" aria-autocomplete="list" autocomplete="off"
+              spellcheck="false" placeholder="Select to apply"> <i class="fa fa-angle-down qaf-arrow-icon qaf-arrow-icon--overlay" aria-hidden="true"></i> <input type="hidden"
+              id="filterVendor" value="">
+            <div id="filterVendorMenu" class="as-filter-select-menu hmt-filter-select-menu as-filter-select-panel hmt-filter-select-panel"
+              role="listbox" hidden></div>
+          </div>
+        </label>
       </div>
-      <div class="lease-filter-field">
-        <label for="fLocation">Location</label>
-        <select id="fLocation" class="as-filter-select"><option value="All">All</option></select>
-      </div>
-      <div class="lease-filter-field">
-        <label for="fVendor">Vendor</label>
-        <select id="fVendor" class="as-filter-select"><option value="All">All</option></select>
-      </div>
-      <div class="lease-filter-field">
-        <label for="fCategory">Category</label>
-        <select id="fCategory" class="as-filter-select"><option value="All">All</option></select>
-      </div>
-      <div class="lease-filter-field">
-        <label for="fAssetType">Asset Type</label>
-        <select id="fAssetType" class="as-filter-select"><option value="All">All</option></select>
-      </div>
-
-      <div class="lease-filter-panel__actions">
-        <button type="button" class="btn-reset" id="resetFiltersBtn">Reset</button>
-        <button type="button" class="btn--dark" id="applyFiltersBtn">Apply</button>
-      </div>
+    </div>
+    <div class="filter-funnel-popup__footer hmt-filter-modal__actions">
+      <button type="button" class="filter-funnel-popup__clear qaf-btn qaf-cs-theme-btn qaf-cs-theme-btn--secondary"
+        id="filterFunnelClear">Clear</button>
+      <button type="button" class="filter-funnel-popup__apply qaf-btn qaf-cs-theme-btn qaf-cs-theme-btn--primary"
+        id="filterFunnelApply">Apply Filters</button>
     </div>
   </div>
 

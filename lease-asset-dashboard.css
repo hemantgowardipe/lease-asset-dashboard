@@ -250,24 +250,6 @@ body:has(#leaseDashboard) {
 .lease-renewals-table th[data-align="right"] { text-align: right; }
 .lease-renewals-table td.gt-emphasis { color: var(--color-text-primary); white-space: normal; }
 
-/* Department-wise / Location-wise header stat pair: "assets" count above,
-   "monthly rent" total above, aligned under their own labels. */
-.lease-mini-stats {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  font-size: var(--font-size-xs);
-}
-.lease-mini-stats__values {
-  display: flex;
-  gap: var(--space-6);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-}
-.lease-mini-stats__values span { min-width: 44px; text-align: center; }
-
 /* ---------------------------------------------------------------------- */
 /* Badges (semantic modifiers reusing existing status color tokens)       */
 /* ---------------------------------------------------------------------- */
@@ -279,27 +261,153 @@ body:has(#leaseDashboard) {
 .badge--lease-neutral { background: var(--color-neutral-badge-bg); color: var(--color-neutral-badge-text); border-color: var(--color-neutral-badge-border); }
 
 /* ---------------------------------------------------------------------- */
-/* Filter drawer                                                           */
+/* Filter funnel — ported from Asset Value Dashboard's own stylesheet.     */
+/* Everything global.css already owns (.as-filter-modal-overlay/.as-filter-
+   modal chrome, .as-filter-fields grid, input/.as-filter-select box,
+   .hmt-filter-modal .hmt-filter-select-input/-panel combobox, .qaf-arrow-
+   icon, .section-title, .qaf-btn + .qaf-cs-theme-btn) is reused as-is via
+   the same class names in index.html — not repeated here. Only what that
+   reference page keeps in its own stylesheet is copied below, with its
+   selectors re-scoped to #leaseDashboard.                                */
 /* ---------------------------------------------------------------------- */
 
-.lease-filter-panel { width: 320px; max-width: 100%; height: 100%; margin-left: auto; overflow-y: auto; padding: var(--space-8); display: flex; flex-direction: column; gap: var(--space-7); }
-.lease-filter-panel__head { display: flex; align-items: center; justify-content: space-between; }
-.lease-filter-field { display: flex; flex-direction: column; gap: var(--space-2); }
-.lease-filter-field label {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+#leaseDashboard .filter-funnel-btn {
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
 }
-.lease-filter-custom-dates { display: flex; gap: var(--space-5); }
-.lease-filter-custom-dates .lease-filter-field { flex: 1 1 0; }
-.lease-filter-panel__actions { display: flex; gap: var(--space-5); margin-top: auto; padding-top: var(--space-5); }
-.lease-filter-panel__actions button { flex: 1 1 0; height: 36px; border-radius: var(--radius-md); font-size: var(--font-size-sm); cursor: pointer; }
-.lease-filter-panel__actions .btn-reset { border: 1px solid var(--color-border-strong); background: var(--color-bg-surface); color: var(--color-text-secondary); }
+#leaseDashboard .filter-funnel-btn:hover,
+#leaseDashboard .filter-funnel-btn:focus,
+#leaseDashboard .filter-funnel-btn:focus-visible,
+#leaseDashboard .filter-funnel-btn:active {
+  outline: none;
+  box-shadow: none;
+}
+#leaseDashboard .filter-funnel-btn .fa {
+  pointer-events: none;
+  color: inherit;
+}
 
-@media (max-width: 480px) {
-  .lease-filter-panel { width: 100%; }
+.as-filter-modal-overlay:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.hmt-filter-modal {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding: 15px;
+}
+
+/* Sibling of the backdrop rather than its child, so it centres itself
+   instead of inheriting the overlay's flex centring. */
+.filter-funnel-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  width: min(760px, calc(100vw - 20px));
+}
+.filter-funnel-popup__body { padding: 0; overflow: visible; }
+
+.hmt-filter-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--color-border-default, #e5e7eb);
+}
+.hmt-filter-modal,
+.hmt-filter-modal .section-title,
+.hmt-filter-modal label,
+.hmt-filter-modal .hmt-filter-field span,
+.hmt-filter-modal .as-filter-select,
+.hmt-filter-modal input,
+.hmt-filter-modal select {
+  font-weight: 400;
+  color: #000;
+}
+
+.hmt-filter-close,
+.as-filter-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: #000;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+  border-radius: 0;
+}
+.hmt-filter-close:hover, .hmt-filter-close:focus, .hmt-filter-close:focus-visible, .hmt-filter-close:active,
+.as-filter-close:hover, .as-filter-close:focus, .as-filter-close:focus-visible, .as-filter-close:active {
+  background: transparent; border: 0; box-shadow: none; color: #000; outline: none;
+}
+
+.hmt-filter-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 10px; }
+.hmt-filter-field[hidden] { display: none !important; }
+.hmt-filter-field { display: grid; gap: 0; font-size: var(--font-size-sm, 12px); min-width: 0; }
+.hmt-filter-field > span { display: block; margin-bottom: 0; font-size: var(--font-size-sm, 12px); font-weight: 500; color: #000; }
+
+.hmt-filter-modal .hmt-filter-fields input.as-filter-select,
+.hmt-filter-modal .hmt-filter-fields select.as-filter-select {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: var(--color-bg-surface, #ffffff);
+  font-family: inherit;
+  font-size: var(--font-size-sm, 12px);
+  line-height: 1.25;
+  outline: none;
+  box-shadow: none;
+}
+.hmt-filter-modal .hmt-filter-fields input.as-filter-select:hover,
+.hmt-filter-modal .hmt-filter-fields input.as-filter-select:focus,
+.hmt-filter-modal .hmt-filter-fields input.as-filter-select:focus-visible {
+  border-color: #9ca3af; outline: none; box-shadow: none;
+}
+.hmt-filter-modal .hmt-filter-fields input.as-filter-select:disabled {
+  background: var(--color-bg-subtle, #f8fafc); color: #6b7280; cursor: not-allowed;
+}
+
+.hmt-filter-select-wrap { position: relative; }
+.hmt-filter-field:has(.hmt-filter-select-wrap.is-open) { position: relative; z-index: 2; }
+.hmt-filter-select-panel .as-filter-select-option.is-filter-hidden { display: none !important; }
+
+.hmt-filter-modal__actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 20px; }
+#filterFunnelClear, #filterFunnelApply { padding: 0 12px; }
+
+.lease-custom-dates { display: flex; gap: 10px; }
+.lease-custom-dates .hmt-filter-field { flex: 1 1 0; }
+
+@media (max-width: 767px) {
+  .hmt-filter-fields { grid-template-columns: 1fr; }
 }
 
 /* ---------------------------------------------------------------------- */
