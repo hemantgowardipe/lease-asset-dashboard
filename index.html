@@ -27,6 +27,13 @@
 </head>
 <body>
 
+<aside class="qaf-navdock" aria-label="Application navigation">
+  <button id="qafNavToggle" type="button" class="qaf-navdock__arrow-indicator" aria-label="Toggle navigation" aria-expanded="false">
+    <i class="fa fa-angle-right" aria-hidden="true"></i>
+  </button>
+  <nav id="qafNavdockList" class="qaf-navdock__list"></nav>
+</aside>
+
 <main class="page-shell lease-dashboard qaf-navdock-layout-shift qaf-cs-theme-host" id="leaseDashboard" aria-busy="true">
 
   <!-- Header -->
@@ -104,7 +111,7 @@
       <div class="lease-bars-list" id="locBars"></div>
     </div>
 
-    <div class="card">
+    <div class="card lease-status-card">
       <h3 class="card-title">Lease Status Mix</h3>
       <div class="lease-status-mix">
         <svg class="lease-status-donut" viewBox="0 0 160 160" id="statusDonut">
@@ -259,6 +266,10 @@
 
 <!-- Existing shared reusable engine (unmodified). -->
 <script src="js/library.js"></script>
+<!-- Shared nav dock (Analytics > Lease Asset Dashboard added — see file
+     header comment at the new MenuId 13 entry). Auto-inits into
+     #qafNavdockList as soon as it loads, same as every other asset page. -->
+<script src="js/Asset_nav_dock.js"></script>
 <!-- Page controller: RNSP wiring, filter state, rendering. -->
 <script src="js/lease-asset-dashboard.js"></script>
 </body>

@@ -36,18 +36,21 @@
 .page-title { padding: 2px 0 8px 0; }
 
 /*
- * global.css reserves a permanent left column on <body> for the fixed
- * .qaf-navdock sidebar (`body { padding-left: var(--qaf-navdock-width-
- * collapsed) }`). That's correct where the dock actually renders, but the
- * dock is `position: fixed` — it never occupies layout space itself, and
- * it sits at a z-index above page content — so this page can safely cancel
- * that reserved padding and let the dock overlap its left edge instead of
- * always eating a permanent ~40px (or wider, on hover-expand) column.
- * Scoped with :has() so global.css itself isn't touched and every other
- * page keeps the reserved gap.
+ * This page now renders the real .qaf-navdock itself (see the <aside> in
+ * index.html + js/Asset_nav_dock.js), the same as every other asset page —
+ * unlike earlier, when this page was previewed standalone with no dock
+ * present at all, so global.css's `body { padding-left: var(--qaf-navdock-
+ * width-collapsed) }` was reserving space for an element that didn't
+ * exist. With the real dock now here, that reserved padding is correct
+ * and wanted again — nothing to override.
+ *
+ * Left/right padding is still made explicit and equal below, matched to
+ * where it visually reads best now that the dock is genuinely occupying
+ * its own 40px column rather than being cancelled out.
  */
-body:has(#leaseDashboard) {
-  padding-left: 0;
+#leaseDashboard.page-shell {
+  padding-left: 24px;
+  padding-right: 24px;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -221,6 +224,15 @@ body:has(#leaseDashboard) {
 .lease-status-legend__text { min-width: 0; flex: 1 1 auto; }
 .lease-status-legend__text b { font-weight: var(--font-weight-semibold); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lease-status-legend__text span { color: var(--color-text-muted); white-space: nowrap; font-size: var(--font-size-xs); }
+
+/* Every card heading is bold, matching the prototype
+   (Lease_Asset_Dashboard_dc.html) exactly — Department-wise Lease Assets,
+   Location-wise Lease Assets, Lease Status Mix, Lease Ageing, and Lease
+   Asset Renewals all share the same .card-title class, so one rule covers
+   all of them. The blanket "12px / normal weight" rule at the top of this
+   file still governs everything else inside a card (values, labels, table
+   cells, badges) — this is specifically the heading text. */
+.card .card-title { font-weight: var(--font-weight-semibold); }
 
 /* ---------------------------------------------------------------------- */
 /* Renewals table card                                                     */

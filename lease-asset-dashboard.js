@@ -352,7 +352,16 @@
     document.getElementById('kpiCostSub').textContent = costSub || '';
   }
 
-  function renderBars(containerEl, payload, fillColor, workflowName) {
+  // Same cycling palette Asset Value Dashboard uses for its own bar panels
+  // (COLOR_POOL in asset_value_dashboard.js) — each row gets the next
+  // color in order, wrapping around if there are more rows than colors.
+  var BAR_COLOR_POOL = [
+    '#2f5bea', '#22a06b', '#f5a623', '#ef4b4b', '#8b7cf6',
+    '#14b8a6', '#60a5fa', '#34d399', '#fbbf24', '#c084fc',
+    '#f87171', '#9ca3af', '#a78bfa', '#10b981', '#d1a86e'
+  ];
+
+  function renderBars(containerEl, payload, workflowName) {
     var rows = extractRowsFlexible(payload, workflowName);
     containerEl.innerHTML = '';
     if (!rows.length) {
@@ -370,14 +379,15 @@
     });
     var max = Math.max.apply(null, items.map(function (i) { return i.count || i.value || 0; }).concat([1]));
     var frag = document.createDocumentFragment();
-    items.forEach(function (item) {
+    items.forEach(function (item, i) {
       var raw = item.count || item.value || 0;
       var pct = max ? (raw / max) * 100 : 0;
+      var color = BAR_COLOR_POOL[i % BAR_COLOR_POOL.length];
       var row = document.createElement('div');
       row.className = 'lease-bar-row';
       row.innerHTML =
         '<div class="label">' + escapeHtml(item.label || '—') + '</div>' +
-        '<div class="track"><div class="fill" style="width:' + pct + '%;background:' + fillColor + '"></div></div>' +
+        '<div class="track"><div class="fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
         '<div class="value">' + item.count + ' \u00B7 ' + fmtCur(item.value) + '</div>';
       frag.appendChild(row);
     });
@@ -401,11 +411,9 @@
     // Keep the base track circle, drop any previously drawn segments/labels.
     Array.from(svg.querySelectorAll('.lease-status-seg, .lease-status-label')).forEach(function (n) { n.remove(); });
 
-    if (!rows.length) {
-      legendEl.innerHTML = '<div class="text-muted" style="font-size:12px">No records for the current filters.</div>';
-      return;
-    }
-
+    // No early "no records" return here on purpose: every known status
+    // label must still show (at a real 0) even when the API returns no
+    // rows at all for the current filters.
     var items = rows.map(function (r) {
       if (Object.prototype.hasOwnProperty.call(r, '__flatKey')) {
         return { status: humanizeKey(r.__flatKey), count: toNumber(r.__flatValue, 0) };
@@ -421,25 +429,33 @@
     var acc = 0;
     var svgNs = 'http://www.w3.org/2000/svg';
 
-    var ordered = STATUS_ORDER.map(function (s) { return items.find(function (i) { return i.status === s; }); })
-      .concat(items.filter(function (i) { return STATUS_ORDER.indexOf(i.status) === -1; }))
-      .filter(Boolean);
+    // Always list every known status — Active, Expiring Soon, Overdue
+    // Renewal, Expired, Renewed — even at a genuine 0, rather than only
+    // the ones the API happened to return this time. Any status the data
+    // has that ISN'T one of these five (an extra/renamed status) still
+    // gets appended after, but only when it actually has assets — there's
+    // no fixed label to show it at 0 against.
+    var ordered = STATUS_ORDER.map(function (s) {
+      var found = items.find(function (i) { return i.status === s; });
+      return found || { status: s, count: 0 };
+    }).concat(items.filter(function (i) { return STATUS_ORDER.indexOf(i.status) === -1 && i.count; }));
 
     ordered.forEach(function (item) {
-      if (!item.count) return; // a 0-count status draws no arc/legend row — nothing to show
       var frac = item.count / denom;
-      var len = frac * C;
-      var circle = document.createElementNS(svgNs, 'circle');
-      circle.setAttribute('class', 'lease-status-seg');
-      circle.setAttribute('cx', '80'); circle.setAttribute('cy', '80'); circle.setAttribute('r', '60');
-      circle.setAttribute('fill', 'none');
-      circle.setAttribute('stroke', STATUS_COLORS[item.status] || '#64748b');
-      circle.setAttribute('stroke-width', '22');
-      circle.setAttribute('stroke-dasharray', len.toFixed(2) + ' ' + (C - len).toFixed(2));
-      circle.setAttribute('stroke-dashoffset', (-acc).toFixed(2));
-      circle.setAttribute('transform', 'rotate(-90 80 80)');
-      svg.appendChild(circle);
-      acc += len;
+      if (item.count) {
+        var len = frac * C;
+        var circle = document.createElementNS(svgNs, 'circle');
+        circle.setAttribute('class', 'lease-status-seg');
+        circle.setAttribute('cx', '80'); circle.setAttribute('cy', '80'); circle.setAttribute('r', '60');
+        circle.setAttribute('fill', 'none');
+        circle.setAttribute('stroke', STATUS_COLORS[item.status] || '#64748b');
+        circle.setAttribute('stroke-width', '22');
+        circle.setAttribute('stroke-dasharray', len.toFixed(2) + ' ' + (C - len).toFixed(2));
+        circle.setAttribute('stroke-dashoffset', (-acc).toFixed(2));
+        circle.setAttribute('transform', 'rotate(-90 80 80)');
+        svg.appendChild(circle);
+        acc += len;
+      }
 
       var legendRow = document.createElement('div');
       legendRow.className = 'lease-status-legend__row';
@@ -918,11 +934,11 @@
       { name: WORKFLOWS.ageing, run: renderAgeing, container: document.getElementById('ageingBars') },
       { name: WORKFLOWS.renewals, run: renderRenewals, container: document.getElementById('renewalsGridWrap') },
       {
-        name: WORKFLOWS.department, run: function (p) { renderBars(document.getElementById('deptBars'), p, '#2563eb', WORKFLOWS.department); },
+        name: WORKFLOWS.department, run: function (p) { renderBars(document.getElementById('deptBars'), p, WORKFLOWS.department); },
         container: document.getElementById('deptBars')
       },
       {
-        name: WORKFLOWS.location, run: function (p) { renderBars(document.getElementById('locBars'), p, '#8b7cf6', WORKFLOWS.location); },
+        name: WORKFLOWS.location, run: function (p) { renderBars(document.getElementById('locBars'), p, WORKFLOWS.location); },
         container: document.getElementById('locBars')
       }
     ];
