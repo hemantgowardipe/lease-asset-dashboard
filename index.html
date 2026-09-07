@@ -162,14 +162,15 @@
     <div class="filter-funnel-popup__body">
       <div class="as-filter-fields hmt-filter-fields">
 
-        <!-- Date Range — kept as-is per spec (7 / 30 / 90 / Custom, default
-             7 Days, never "All"); everything else in this popup is the
+        <!-- Date Range — kept as-is per spec (7 / 30 / 90 / Custom, never
+             "All"); default moved from 7 Days to 30 Days, the 7 Days option
+             itself is unchanged. Everything else in this popup is the
              ported searchable-combobox contract. -->
         <label class="hmt-filter-field" data-filter-key="dateRange">
           <span>Date Range</span>
           <select id="fDateRange" class="as-filter-select">
             <option value="7">7 Days</option>
-            <option value="30">30 Days</option>
+            <option value="30" selected>30 Days</option>
             <option value="90">90 Days</option>
             <option value="custom">Custom</option>
           </select>

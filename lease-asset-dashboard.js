@@ -211,7 +211,7 @@
     if (!obj || typeof obj !== 'object') return undefined;
     if (Object.prototype.hasOwnProperty.call(obj, '__flatKey')) return undefined; // handled by callers directly
     var keys = Object.keys(obj);
-    var normalize = function (s) { return String(s).toLowerCase().replace(/[\s_-]/g, ''); };
+    var normalize = function (s) { return String(s).toLowerCase().replace(/[^a-z0-9]/g, ''); };
     var normKeys = keys.map(normalize);
     for (var i = 0; i < candidates.length; i++) {
       var idx = normKeys.indexOf(normalize(candidates[i]));
@@ -252,11 +252,13 @@
   // Filter state
   // ------------------------------------------------------------------
 
-  // Date range stays exactly as before (spec: 7/30/90/Custom, default 7,
-  // never "All"). Everything else — AssetType/Category/Location/Department/
+  // Date range stays exactly as before (spec: 7/30/90/Custom, never "All").
+  // Default is 30 Days — the 7 Days option itself is unchanged/still
+  // present, only the default selection moved from 7 to 30.
+  // Everything else — AssetType/Category/Location/Department/
   // Vendor — is driven by the searchable-combobox fields below, ported
   // from Asset Value Dashboard's filter funnel.
-  var dateFilter = { rangeValue: '7', from: '', to: '' };
+  var dateFilter = { rangeValue: '30', from: '', to: '' };
 
   var FILTER_KEYS = ['AssetType', 'Category', 'Location', 'Department', 'Vendor'];
   var FILTER_FIELD_IDS = {
@@ -292,7 +294,7 @@
       var to = filter.to || toIsoDate(today);
       return { StartDate: from, EndDate: to };
     }
-    var days = parseInt(filter.rangeValue, 10) || 7;
+    var days = parseInt(filter.rangeValue, 10) || 30;
     var start = new Date(today);
     start.setDate(start.getDate() - days);
     return { StartDate: toIsoDate(start), EndDate: toIsoDate(today) };
@@ -666,7 +668,7 @@
   // ------------------------------------------------------------------
 
   function normalizeKey(key) {
-    return String(key == null ? '' : key).trim().toLowerCase().replace(/[\s_-]+/g, '');
+    return String(key == null ? '' : key).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
   function getFieldLoose(row, candidates) {
@@ -1033,8 +1035,8 @@
         filterDropdownOptions.Category = getOptionsForFilterKey('Category');
         renderFilterDropdownMenu('Category');
 
-        dateFilter = { rangeValue: '7', from: '', to: '' };
-        document.getElementById('fDateRange').value = '7';
+        dateFilter = { rangeValue: '30', from: '', to: '' };
+        document.getElementById('fDateRange').value = '30';
         document.getElementById('fFrom').value = '';
         document.getElementById('fTo').value = '';
         document.getElementById('customDateFields').style.display = 'none';
@@ -1156,7 +1158,7 @@
     applyCsSettingButtonStyles();
     wireEvents();
     loadFilterValues();     // spec: 1 x ASSET_VALUE_FILTER on initial load only
-    loadDashboardData();    // spec: 6 x dashboard workflows, 7-day default window
+    loadDashboardData();    // spec: 6 x dashboard workflows, 30-day default window
   }
 
   // IMPORTANT: this page is loaded into an existing SPA shell (QuickAppFlow's
