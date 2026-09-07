@@ -153,6 +153,7 @@ body:has(#leaseDashboard) {
   gap: var(--space-4);
   flex-wrap: wrap;
 }
+.lease-card-head h3 { text-align: left; }
 
 .lease-bars-list {
   max-height: 230px;
@@ -172,6 +173,7 @@ body:has(#leaseDashboard) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: left;
 }
 .lease-bar-row .track {
   flex: 1 1 0;

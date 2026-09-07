@@ -501,15 +501,15 @@
   }
 
   var RENEWAL_COLUMNS = [
-    { key: 'id', label: 'Asset ID', minWidth: 90 },
-    { key: 'asset', label: 'Lease Asset', minWidth: 160, emphasis: true },
-    { key: 'dept', label: 'Department', minWidth: 100 },
-    { key: 'location', label: 'Location', minWidth: 100 },
-    { key: 'vendor', label: 'Lessor / Vendor', minWidth: 120 },
-    { key: 'end', label: 'Lease End', minWidth: 100 },
-    { key: 'days', label: 'Days', minWidth: 70, align: 'right' },
-    { key: 'status', label: 'Renewal Status', minWidth: 140, sortable: false }
-  ];
+    { key: 'id', label: 'Asset ID', minWidth: 90, weight: 0.09 },
+    { key: 'asset', label: 'Lease Asset', minWidth: 160, weight: 0.22, emphasis: true },
+    { key: 'dept', label: 'Department', minWidth: 100, weight: 0.12 },
+    { key: 'location', label: 'Location', minWidth: 100, weight: 0.13 },
+    { key: 'vendor', label: 'Lessor / Vendor', minWidth: 120, weight: 0.13 },
+    { key: 'end', label: 'Lease End', minWidth: 100, weight: 0.11 },
+    { key: 'days', label: 'Days', minWidth: 70, weight: 0.06, align: 'right' },
+    { key: 'status', label: 'Renewal Status', minWidth: 140, weight: 0.14, sortable: false }
+  ]; // weights sum to 1.0 — see ensureGrid() for how they're turned into px
 
   function badgeClassFor(days) {
     if (days == null || isNaN(days)) return 'badge--lease-neutral';
@@ -559,8 +559,37 @@
       }).join('') +
       '</tr></thead><tbody></tbody></table>';
     var table = document.getElementById('renewalsTable');
+
+    // WHY THIS IS HERE (debugging note for whoever touches this next):
+    // library.js's GridTable.create() is the shared, unmodified reusable
+    // engine — this file never changes it. Left to its own defaults it
+    // sizes each column from the *rendered content it can see at creation
+    // time* (resolveInitialWidths: saved → declared → measured → content-
+    // estimated). We used to call create() against an still-empty <tbody>
+    // with only columnMinWidths set, so it had nothing real to measure and
+    // fell back to a tiny per-column estimate. Our own CSS then force-
+    // stretches the table to the card's full width (needed so the grid
+    // isn't left looking cut off on a wide screen) — and with table-layout:
+    // fixed plus every column pinned to a small explicit px width, the
+    // browser has nowhere sensible to put that leftover width and dumps it
+    // unevenly into a single column, which is exactly the "shrunk /
+    // lopsided gap" look. Fixing it in library.js would mean changing a
+    // shared engine every other table on the platform also depends on, so
+    // instead we give create() explicit `columnWidths` computed from the
+    // wrap's REAL width right now, split by each column's declared
+    // `weight` (RENEWAL_COLUMNS above, sums to 1.0). Declared widths are
+    // GridTable's second-highest priority (only a user's own saved resize
+    // wins over them), so the columns fill the row correctly from the very
+    // first render, and table-layout:fixed's drag-isolation guarantees
+    // (dragging one column never disturbs its neighbours) are untouched.
+    var availableWidth = Math.max(wrap.clientWidth || 0, RENEWAL_COLUMNS.length * 90);
+    var columnWidths = RENEWAL_COLUMNS.map(function (c) {
+      return Math.max(c.minWidth || 90, Math.round(availableWidth * c.weight));
+    });
+
     state.gridInstance = window.GridTable.create(table, {
       resizeStorageKey: 'lease-asset-renewals',
+      columnWidths: columnWidths,
       columnMinWidths: RENEWAL_COLUMNS.map(function (c) { return c.minWidth || 90; })
     });
     return state.gridInstance;
