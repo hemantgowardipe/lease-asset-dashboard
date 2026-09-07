@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lease Asset Dashboard</title>
 
+<!-- Copied from the real ServiceDashboard.html: this is how fonts actually
+     get loaded on every page (global.css sets font-family: "Poppins", ...
+     but does not itself load the font file). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400&display=swap" rel="stylesheet">
+
 <!-- Existing shared project stylesheet (unmodified). -->
 <link rel="stylesheet" href="css/global.css">
 <!-- Page-specific additions only (see file header for what's added vs. reused). -->
@@ -12,7 +19,7 @@
 </head>
 <body>
 
-<div class="page-shell lease-dashboard" id="leaseDashboard">
+<main class="page-shell lease-dashboard qaf-navdock-layout-shift" id="leaseDashboard" aria-busy="true">
 
   <!-- Header -->
   <header class="lease-dashboard__header">
@@ -78,7 +85,13 @@
     <div class="card">
       <div class="lease-card-head">
         <h3 class="card-title">Department-wise Lease Assets</h3>
-        <span class="text-muted" style="font-size:11px">assets &middot; monthly rent</span>
+        <div class="lease-mini-stats">
+          <span class="text-muted">assets &middot; monthly rent</span>
+          <span class="lease-mini-stats__values">
+            <span id="deptTotalAssets">&mdash;</span>
+            <span id="deptTotalRent">&mdash;</span>
+          </span>
+        </div>
       </div>
       <div class="lease-bars-list" id="deptBars"></div>
     </div>
@@ -86,7 +99,13 @@
     <div class="card">
       <div class="lease-card-head">
         <h3 class="card-title">Location-wise Lease Assets</h3>
-        <span class="text-muted" style="font-size:11px">assets &middot; monthly rent</span>
+        <div class="lease-mini-stats">
+          <span class="text-muted">assets &middot; monthly rent</span>
+          <span class="lease-mini-stats__values">
+            <span id="locTotalAssets">&mdash;</span>
+            <span id="locTotalRent">&mdash;</span>
+          </span>
+        </div>
       </div>
       <div class="lease-bars-list" id="locBars"></div>
     </div>
@@ -124,7 +143,7 @@
         <button type="button" data-tab="all">All</button>
       </div>
     </div>
-    <div id="renewalsGridWrap" class="table-wrap lease-renewals-table-wrap"></div>
+    <div id="renewalsGridWrap" class="table-wrap lease-renewals-table-wrap qaf-scrollbar-10"></div>
   </div>
 
   <!-- Filter drawer -->
@@ -185,7 +204,7 @@
   </div>
 
   <div id="dashboardError" style="display:none"></div>
-</div>
+</main>
 
 <!-- Existing shared reusable engine (unmodified). -->
 <script src="js/library.js"></script>

@@ -145,6 +145,44 @@
   }
 
   /**
+   * extractRows() only handles the "array of records" envelope. Some
+   * workflows (Lease Ageing was the one that surfaced this) return a FLAT
+   * object instead — e.g. { Overdue: 5, "Due0to30": 6, ... } rather than
+   * [{ Bucket: "Overdue", Count: 5 }, ...]. When extractRows() finds
+   * nothing, this falls back to treating every own-property of the object
+   * whose value is a plain number (or numeric string) as one row, so a
+   * flat bucket→count style response still renders instead of silently
+   * showing "no records" despite the API genuinely returning data. Logs
+   * which path it took so this is visible in the console rather than a
+   * silent guess.
+   */
+  function extractRowsFlexible(payload, workflowName) {
+    var rows = extractRows(payload);
+    if (rows.length) return rows;
+    if (Array.isArray(payload) || !payload || typeof payload !== 'object') return [];
+
+    var keys = Object.keys(payload).filter(function (k) {
+      var v = payload[k];
+      if (v == null) return false;
+      if (typeof v === 'number') return true;
+      if (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))) return true;
+      return false;
+    });
+    if (!keys.length) return [];
+    console.info('[lease-dashboard] ' + (workflowName || '') +
+      ' response was a flat object, not an array — treating each key as a row (' + JSON.stringify(keys) + '). ' +
+      'If this mapping looks wrong, check the raw response logged above.');
+    return keys.map(function (k) { return { __flatKey: k, __flatValue: payload[k] }; });
+  }
+
+  function humanizeKey(k) {
+    return String(k)
+      .replace(/_/g, ' ')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .trim();
+  }
+
+  /**
    * Case/space/underscore-insensitive field lookup. Never fabricates a
    * value — returns undefined (and logs what it tried) if nothing in
    * `candidates` actually exists on `obj`, so a missing mapping is visible
@@ -152,6 +190,7 @@
    */
   function pickField(obj, candidates, context) {
     if (!obj || typeof obj !== 'object') return undefined;
+    if (Object.prototype.hasOwnProperty.call(obj, '__flatKey')) return undefined; // handled by callers directly
     var keys = Object.keys(obj);
     var normalize = function (s) { return String(s).toLowerCase().replace(/[\s_-]/g, ''); };
     var normKeys = keys.map(normalize);
@@ -276,14 +315,18 @@
     document.getElementById('kpiCostSub').textContent = costSub || '';
   }
 
-  function renderBars(containerEl, payload, fillColor, workflowName) {
-    var rows = extractRows(payload);
+  function renderBars(containerEl, payload, fillColor, workflowName, totalsEls) {
+    var rows = extractRowsFlexible(payload, workflowName);
     containerEl.innerHTML = '';
     if (!rows.length) {
       containerEl.innerHTML = '<div class="text-muted" style="font-size:12px">No records for the current filters.</div>';
+      if (totalsEls) { totalsEls.count.textContent = '0'; totalsEls.value.textContent = fmtCur(0); }
       return;
     }
     var items = rows.map(function (r) {
+      if (Object.prototype.hasOwnProperty.call(r, '__flatKey')) {
+        return { label: humanizeKey(r.__flatKey), count: toNumber(r.__flatValue, 0), value: 0 };
+      }
       var label = pickField(r, ['Department', 'Location', 'Label', 'Name', 'Group'], workflowName);
       var count = toNumber(pickField(r, ['Count', 'AssetCount', 'Total'], workflowName), 0);
       var value = toNumber(pickField(r, ['MonthlyValue', 'MonthlyRent', 'Value'], workflowName), 0);
@@ -303,6 +346,13 @@
       frag.appendChild(row);
     });
     containerEl.appendChild(frag);
+
+    if (totalsEls) {
+      var totalCount = items.reduce(function (a, i) { return a + toNumber(i.count, 0); }, 0);
+      var totalValue = items.reduce(function (a, i) { return a + toNumber(i.value, 0); }, 0);
+      totalsEls.count.textContent = String(totalCount);
+      totalsEls.value.textContent = fmtCur(totalValue);
+    }
   }
 
   var STATUS_COLORS = {
@@ -315,7 +365,7 @@
   var STATUS_ORDER = ['Active', 'Expiring Soon', 'Overdue Renewal', 'Expired', 'Renewed'];
 
   function renderStatusMix(payload) {
-    var rows = extractRows(payload);
+    var rows = extractRowsFlexible(payload, WORKFLOWS.statusMix);
     var svg = document.getElementById('statusDonut');
     var legendEl = document.getElementById('statusLegend');
     legendEl.innerHTML = '';
@@ -328,6 +378,9 @@
     }
 
     var items = rows.map(function (r) {
+      if (Object.prototype.hasOwnProperty.call(r, '__flatKey')) {
+        return { status: humanizeKey(r.__flatKey), count: toNumber(r.__flatValue, 0) };
+      }
       return {
         status: pickField(r, ['Status', 'LeaseStatus'], WORKFLOWS.statusMix),
         count: toNumber(pickField(r, ['Count', 'AssetCount'], WORKFLOWS.statusMix), 0)
@@ -382,7 +435,7 @@
   }
 
   function renderAgeing(payload) {
-    var rows = extractRows(payload);
+    var rows = extractRowsFlexible(payload, WORKFLOWS.ageing);
     var container = document.getElementById('ageingBars');
     container.innerHTML = '';
     document.getElementById('ageingMeta').textContent = '';
@@ -391,6 +444,9 @@
       return;
     }
     var items = rows.map(function (r) {
+      if (Object.prototype.hasOwnProperty.call(r, '__flatKey')) {
+        return { bucket: humanizeKey(r.__flatKey), count: toNumber(r.__flatValue, 0) };
+      }
       return {
         bucket: pickField(r, ['Bucket', 'AgeingBucket', 'Label'], WORKFLOWS.ageing),
         count: toNumber(pickField(r, ['Count', 'AssetCount'], WORKFLOWS.ageing), 0)
@@ -465,11 +521,11 @@
     if (state.gridInstance) return state.gridInstance;
     var wrap = document.getElementById('renewalsGridWrap');
     wrap.innerHTML =
-      '<table class="lease-renewals-table" id="renewalsTable">' +
+      '<table class="asset-table lease-renewals-table" id="renewalsTable" data-resize-key="lease-asset-renewals">' +
       '<thead><tr>' +
       RENEWAL_COLUMNS.map(function (c) {
         return '<th' + (c.align ? ' data-align="' + c.align + '"' : '') +
-          (c.sortable === false ? ' class="no-sort"' : '') + '>' + escapeHtml(c.label) + '</th>';
+          (c.sortable === false ? ' class="no-sort"' : ' class="gt-sortable"') + '>' + escapeHtml(c.label) + '</th>';
       }).join('') +
       '</tr></thead><tbody></tbody></table>';
     var table = document.getElementById('renewalsTable');
@@ -518,7 +574,7 @@
   }
 
   function renderRenewals(payload) {
-    var rows = extractRows(payload).map(mapRenewalRow);
+    var rows = extractRowsFlexible(payload, WORKFLOWS.renewals).map(mapRenewalRow);
     state.renewRowsRaw = rows;
     var overdueCount = rows.filter(function (r) { return r.days != null && r.days < 0; }).length;
     document.getElementById('renewMeta').textContent = rows.length + ' leases \u00B7 ' + overdueCount + ' overdue';
@@ -588,11 +644,17 @@
       { name: WORKFLOWS.ageing, run: renderAgeing, container: document.getElementById('ageingBars') },
       { name: WORKFLOWS.renewals, run: renderRenewals, container: document.getElementById('renewalsGridWrap') },
       {
-        name: WORKFLOWS.department, run: function (p) { renderBars(document.getElementById('deptBars'), p, '#2563eb', WORKFLOWS.department); },
+        name: WORKFLOWS.department, run: function (p) {
+          renderBars(document.getElementById('deptBars'), p, '#2563eb', WORKFLOWS.department,
+            { count: document.getElementById('deptTotalAssets'), value: document.getElementById('deptTotalRent') });
+        },
         container: document.getElementById('deptBars')
       },
       {
-        name: WORKFLOWS.location, run: function (p) { renderBars(document.getElementById('locBars'), p, '#8b7cf6', WORKFLOWS.location); },
+        name: WORKFLOWS.location, run: function (p) {
+          renderBars(document.getElementById('locBars'), p, '#8b7cf6', WORKFLOWS.location,
+            { count: document.getElementById('locTotalAssets'), value: document.getElementById('locTotalRent') });
+        },
         container: document.getElementById('locBars')
       }
     ];

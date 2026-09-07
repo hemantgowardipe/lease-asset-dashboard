@@ -9,11 +9,12 @@
    .hmt-ticket-table).
    ========================================================================== */
 
-.lease-dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-7);
-}
+.lease-dashboard { display: flex; flex-direction: column; gap: var(--space-7); }
+
+/* Matches service-dashboard.css's own .page-title override — global.css's
+   base h1/.page-title rule is margin:0 with no padding, and every real page
+   adds this same bottom padding itself. */
+.page-title { padding: 2px 0 8px 0; }
 
 /*
  * global.css reserves a permanent left column on <body> for the fixed
@@ -229,22 +230,31 @@ body:has(#leaseDashboard) {
 .lease-renewals-table { min-width: 900px; max-height: 360px; }
 .lease-renewals-table-wrap { max-height: 360px; }
 
-/* Resize/sort visuals for this page's table, following the same pattern
-   global.css already declares for .servdash-table / .hmt-ticket-table. */
-.lease-renewals-table thead th .gt-col-resizer {
-  width: 10px;
-  right: -5px;
-  top: 0;
-  height: 100%;
-  z-index: 2;
-  cursor: col-resize;
-}
-.lease-renewals-table thead:hover th .gt-col-resizer::after {
-  background: var(--color-border-default, #e5e7eb);
-}
+/* Sort/resize visuals (sort glyph, resize handle) are fully generic in the
+   latest global.css now — table th .gt-sort-icon / .gt-col-resizer apply to
+   any <table>, not just page-specific classes — so nothing page-specific is
+   needed here anymore. */
 .lease-renewals-table td[data-align="right"],
 .lease-renewals-table th[data-align="right"] { text-align: right; }
 .lease-renewals-table td.gt-emphasis { color: var(--color-text-primary); white-space: normal; }
+
+/* Department-wise / Location-wise header stat pair: "assets" count above,
+   "monthly rent" total above, aligned under their own labels. */
+.lease-mini-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: var(--font-size-xs);
+}
+.lease-mini-stats__values {
+  display: flex;
+  gap: var(--space-6);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+.lease-mini-stats__values span { min-width: 44px; text-align: center; }
 
 /* ---------------------------------------------------------------------- */
 /* Badges (semantic modifiers reusing existing status color tokens)       */
