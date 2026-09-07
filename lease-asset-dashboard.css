@@ -11,6 +11,25 @@
 
 .lease-dashboard { display: flex; flex-direction: column; gap: var(--space-7); }
 
+/* All text inside a card: 12px, normal weight, Poppins stack — overrides
+   every larger/bolder size set elsewhere in this file (KPI values,
+   card-title, bar values, badges, table cells, etc). Excludes the KPI
+   icon glyphs below, which are decorative squares/diamonds, not text, and
+   the donut's own SVG number/label (set inline by JS as part of the chart
+   itself, not page text — inline styles aren't reachable from CSS without
+   !important, and are left as-is here since they're the chart's own
+   labels rather than surrounding UI text). */
+.card, .card *,
+.lease-kpi-card, .lease-kpi-card * {
+  font-size: 12px;
+  font-weight: 400;
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.lease-kpi-card .lease-kpi-card__icon,
+.lease-kpi-card .lease-kpi-card__icon i {
+  font-size: 15px;
+}
+
 /* Matches service-dashboard.css's own .page-title override — global.css's
    base h1/.page-title rule is margin:0 with no padding, and every real page
    adds this same bottom padding itself. */
@@ -50,11 +69,6 @@ body:has(#leaseDashboard) {
   flex-wrap: nowrap;
 }
 
-.lease-filter-summary {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-}
-.lease-filter-summary.has-filters { color: var(--color-primary); }
 
 /* ---------------------------------------------------------------------- */
 /* KPI cards                                                               */
@@ -364,7 +378,7 @@ body:has(#leaseDashboard) {
   background: transparent; border: 0; box-shadow: none; color: #000; outline: none;
 }
 
-.hmt-filter-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 10px; row-gap: 10px; }
+.hmt-filter-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; row-gap: 10px; }
 .hmt-filter-field[hidden] { display: none !important; }
 .hmt-filter-field { display: grid; gap: 0; font-size: var(--font-size-sm, 12px); min-width: 0; }
 .hmt-filter-field > span { display: block; margin-bottom: 0; font-size: var(--font-size-sm, 12px); font-weight: 500; color: #000; }

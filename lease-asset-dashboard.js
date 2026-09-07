@@ -880,21 +880,8 @@
   // Orchestration
   // ------------------------------------------------------------------
 
-  function updateFilterSummary() {
-    var chips = [];
-    FILTER_KEYS.forEach(function (k) { if (selected[k]) chips.push(selected[k]); });
-    var rangeLabel = dateFilter.rangeValue === 'custom'
-      ? (dateFilter.from || dateFilter.to ? dateFilter.from + ' \u2192 ' + dateFilter.to : 'Custom')
-      : dateFilter.rangeValue + ' Days';
-    chips.push(rangeLabel);
-    var el = document.getElementById('filterSummary');
-    el.textContent = 'Filtered: ' + chips.join(' \u00B7 ');
-    el.classList.toggle('has-filters', chips.length > 1 || dateFilter.rangeValue !== '7');
-  }
-
   async function loadDashboardData() {
     var args = buildArgs();
-    updateFilterSummary();
 
     var jobs = [
       { name: WORKFLOWS.summary, run: renderKpis, container: document.getElementById('kpiGrid') },
@@ -1031,11 +1018,97 @@
   }
 
   // ------------------------------------------------------------------
+  // CS_SETTING button theme — ported from Asset Value Dashboard. Reads the
+  // tenant's configured button colors out of localStorage (or via
+  // window.QafLibrary, when present) and publishes them as
+  // --ButtonBackGroundColor / --ButtonTextColor on the page's
+  // .qaf-cs-theme-host root, which every .qaf-cs-theme-btn (Clear/Apply)
+  // and .qaf-btn--square-inverse (the funnel trigger) already reads via
+  // global.css — so this applies to every themed button on the page, not
+  // just one.
+  // ------------------------------------------------------------------
+
+  function tryParseJsonLoose(raw) {
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+
+  function collectCsSettingCandidates(node, candidates, depth) {
+    if (!node || typeof node !== 'object' || depth > 4) return;
+    if (Array.isArray(node)) {
+      node.forEach(function (entry) { collectCsSettingCandidates(entry, candidates, depth + 1); });
+      return;
+    }
+    candidates.push(node);
+    if (node.QAFTHEME) collectCsSettingCandidates(node.QAFTHEME, candidates, depth + 1);
+    if (typeof node.value === 'string') {
+      collectCsSettingCandidates(tryParseJsonLoose(node.value), candidates, depth + 1);
+    } else if (node.value) {
+      collectCsSettingCandidates(node.value, candidates, depth + 1);
+    }
+  }
+
+  function readCsSettingColors() {
+    var library = window.QafLibrary;
+    var sharedReader = library && library.SquareButtonTheme && typeof library.SquareButtonTheme.readCsSettingColors === 'function'
+      ? library.SquareButtonTheme.readCsSettingColors : null;
+    if (sharedReader) {
+      var shared = sharedReader() || {};
+      return {
+        backgroundColor: String(shared.backgroundColor || '').trim(),
+        textColor: String(shared.textColor || '').trim()
+      };
+    }
+
+    var backgroundColor = '', textColor = '';
+    try {
+      var raw = (window.localStorage && window.localStorage.getItem('CS_SETTING')) || '';
+      if (!raw) return { backgroundColor: backgroundColor, textColor: textColor };
+      var candidates = [];
+      collectCsSettingCandidates(tryParseJsonLoose(raw), candidates, 0);
+      for (var i = 0; i < candidates.length; i++) {
+        var source = candidates[i] || {};
+        var bg = String(source.ButtonBackGroundColor || source.buttonBackGroundColor || source.ButtonBackgroundColor || '').trim();
+        var fg = String(source.ButtonTextColor || source.buttonTextColor || '').trim();
+        if (bg) backgroundColor = backgroundColor || bg;
+        if (fg) textColor = textColor || fg;
+      }
+    } catch (e) {
+      backgroundColor = ''; textColor = '';
+    }
+    return { backgroundColor: backgroundColor, textColor: textColor };
+  }
+
+  function applySquareButtonInverseTheme() {
+    if (window.QafLibrary && typeof window.QafLibrary.applySquareButtonInverseTheme === 'function') {
+      window.QafLibrary.applySquareButtonInverseTheme('#leaseDashboard');
+    }
+  }
+
+  function applyCsSettingButtonStyles() {
+    var host = document.getElementById('leaseDashboard');
+    if (!host) return;
+
+    if (window.QafLibrary && typeof window.QafLibrary.applyCsSettingTheme === 'function') {
+      window.QafLibrary.applyCsSettingTheme(host);
+      applySquareButtonInverseTheme();
+      return;
+    }
+
+    var colors = readCsSettingColors();
+    if (colors.backgroundColor) host.style.setProperty('--ButtonBackGroundColor', colors.backgroundColor);
+    else host.style.removeProperty('--ButtonBackGroundColor');
+    if (colors.textColor) host.style.setProperty('--ButtonTextColor', colors.textColor);
+    else host.style.removeProperty('--ButtonTextColor');
+    applySquareButtonInverseTheme();
+  }
+
+  // ------------------------------------------------------------------
   // Init
   // ------------------------------------------------------------------
 
   function init() {
     console.debug('[lease-dashboard] init() running, document.readyState =', document.readyState);
+    applyCsSettingButtonStyles();
     wireEvents();
     loadFilterValues();     // spec: 1 x ASSET_VALUE_FILTER on initial load only
     loadDashboardData();    // spec: 6 x dashboard workflows, 7-day default window
