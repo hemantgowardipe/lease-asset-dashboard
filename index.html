@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lease Asset Dashboard</title>
+
+<!-- Existing shared project stylesheet (unmodified). -->
+<link rel="stylesheet" href="css/global.css">
+<!-- Page-specific additions only (see file header for what's added vs. reused). -->
+<link rel="stylesheet" href="css/lease-asset-dashboard.css">
+</head>
+<body>
+
+<div class="page-shell lease-dashboard" id="leaseDashboard">
+
+  <!-- Header -->
+  <header class="lease-dashboard__header">
+    <div>
+      <h1 class="page-title">Lease Asset Dashboard</h1>
+    </div>
+    <div class="lease-dashboard__header-right">
+      <span class="lease-filter-summary" id="filterSummary">As of &mdash;</span>
+      <button type="button" class="btn--icon toolbar__icon-btn" id="openFiltersBtn" title="Filters" aria-label="Filters">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:#fff">
+          <path d="M4 5h16M7 12h10M10 19h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- KPI cards (SummaryCard_Wise_Lease_Assets) -->
+  <div class="lease-kpi-grid" id="kpiGrid">
+    <div class="lease-kpi-card">
+      <div class="lease-kpi-card__head">
+        <div class="lease-kpi-card__label">Total Lease Assets</div>
+        <div class="lease-kpi-card__icon lease-kpi-card__icon--blue">&#9632;</div>
+      </div>
+      <div class="lease-kpi-card__value" id="kpiTotal">&mdash;</div>
+      <div class="lease-kpi-card__sub" id="kpiTotalSub"></div>
+    </div>
+    <div class="lease-kpi-card">
+      <div class="lease-kpi-card__head">
+        <div class="lease-kpi-card__label">Active Leases</div>
+        <div class="lease-kpi-card__icon lease-kpi-card__icon--green">&#9670;</div>
+      </div>
+      <div class="lease-kpi-card__value" id="kpiActive">&mdash;</div>
+      <div class="lease-kpi-card__sub" id="kpiActiveSub"></div>
+    </div>
+    <div class="lease-kpi-card">
+      <div class="lease-kpi-card__head">
+        <div class="lease-kpi-card__label">Renewals Due <span class="sub">(contracts)</span></div>
+        <div class="lease-kpi-card__icon lease-kpi-card__icon--amber">&#8635;</div>
+      </div>
+      <div class="lease-kpi-card__value" id="kpiRenewals">&mdash;</div>
+      <div class="lease-kpi-card__sub" id="kpiRenewalsSub"></div>
+    </div>
+    <div class="lease-kpi-card">
+      <div class="lease-kpi-card__head">
+        <div class="lease-kpi-card__label">Leases Due <span class="sub">(payable)</span></div>
+        <div class="lease-kpi-card__icon lease-kpi-card__icon--red">&#9200;</div>
+      </div>
+      <div class="lease-kpi-card__value" id="kpiDue">&mdash;</div>
+      <div class="lease-kpi-card__sub" id="kpiDueSub"></div>
+    </div>
+    <div class="lease-kpi-card">
+      <div class="lease-kpi-card__head">
+        <div class="lease-kpi-card__label">Monthly Lease Cost</div>
+        <div class="lease-kpi-card__icon lease-kpi-card__icon--purple">&#9724;</div>
+      </div>
+      <div class="lease-kpi-card__value" id="kpiCost">&mdash;</div>
+      <div class="lease-kpi-card__sub" id="kpiCostSub"></div>
+    </div>
+  </div>
+
+  <!-- Department-wise / Location-wise / Status mix -->
+  <div class="lease-bars-grid">
+    <div class="card">
+      <div class="lease-card-head">
+        <h3 class="card-title">Department-wise Lease Assets</h3>
+        <span class="text-muted" style="font-size:11px">assets &middot; monthly rent</span>
+      </div>
+      <div class="lease-bars-list" id="deptBars"></div>
+    </div>
+
+    <div class="card">
+      <div class="lease-card-head">
+        <h3 class="card-title">Location-wise Lease Assets</h3>
+        <span class="text-muted" style="font-size:11px">assets &middot; monthly rent</span>
+      </div>
+      <div class="lease-bars-list" id="locBars"></div>
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">Lease Status Mix</h3>
+      <div class="lease-status-mix">
+        <svg class="lease-status-donut" viewBox="0 0 160 160" id="statusDonut">
+          <circle cx="80" cy="80" r="60" fill="none" stroke="#f3f4f6" stroke-width="22"></circle>
+        </svg>
+        <div class="lease-status-legend" id="statusLegend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lease Ageing -->
+  <div class="card">
+    <div class="lease-card-head">
+      <h3 class="card-title">Lease Ageing</h3>
+      <span class="text-muted" id="ageingMeta" style="font-size:11px"></span>
+    </div>
+    <div class="lease-ageing-list" id="ageingBars"></div>
+  </div>
+
+  <!-- Lease Asset Renewals (reusable GridTable) -->
+  <div class="card">
+    <div class="lease-table-card__head">
+      <div>
+        <h3 class="card-title">Lease Asset Renewals</h3>
+        <div class="text-muted" id="renewMeta" style="font-size:11px;margin-top:2px"></div>
+      </div>
+      <div class="lease-tab-group" id="renewTabs">
+        <button type="button" data-tab="upcoming" class="is-active">Upcoming</button>
+        <button type="button" data-tab="overdue">Overdue</button>
+        <button type="button" data-tab="all">All</button>
+      </div>
+    </div>
+    <div id="renewalsGridWrap" class="table-wrap lease-renewals-table-wrap"></div>
+  </div>
+
+  <!-- Filter drawer -->
+  <div class="modal-overlay as-filter-modal-overlay" id="filterOverlay" style="display:none;align-items:flex-start;justify-content:flex-end;">
+    <div class="modal-panel as-filter-modal lease-filter-panel" id="filterPanel">
+      <div class="lease-filter-panel__head">
+        <h2 class="section-title">Filters</h2>
+        <button type="button" class="btn--icon toolbar__icon-btn" id="closeFiltersBtn" aria-label="Close" style="border:1px solid var(--color-border-strong);background:transparent;color:var(--color-text-secondary)">&times;</button>
+      </div>
+
+      <div class="lease-filter-field">
+        <label for="fDateRange">Date Range</label>
+        <select id="fDateRange" class="as-filter-select">
+          <option value="7">7 Days</option>
+          <option value="30">30 Days</option>
+          <option value="90">90 Days</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+
+      <div class="lease-filter-custom-dates" id="customDateFields" style="display:none">
+        <div class="lease-filter-field">
+          <label for="fFrom">From</label>
+          <input type="date" id="fFrom" class="as-search-input">
+        </div>
+        <div class="lease-filter-field">
+          <label for="fTo">To</label>
+          <input type="date" id="fTo" class="as-search-input">
+        </div>
+      </div>
+
+      <div class="lease-filter-field">
+        <label for="fDepartment">Department</label>
+        <select id="fDepartment" class="as-filter-select"><option value="All">All</option></select>
+      </div>
+      <div class="lease-filter-field">
+        <label for="fLocation">Location</label>
+        <select id="fLocation" class="as-filter-select"><option value="All">All</option></select>
+      </div>
+      <div class="lease-filter-field">
+        <label for="fVendor">Vendor</label>
+        <select id="fVendor" class="as-filter-select"><option value="All">All</option></select>
+      </div>
+      <div class="lease-filter-field">
+        <label for="fCategory">Category</label>
+        <select id="fCategory" class="as-filter-select"><option value="All">All</option></select>
+      </div>
+      <div class="lease-filter-field">
+        <label for="fAssetType">Asset Type</label>
+        <select id="fAssetType" class="as-filter-select"><option value="All">All</option></select>
+      </div>
+
+      <div class="lease-filter-panel__actions">
+        <button type="button" class="btn-reset" id="resetFiltersBtn">Reset</button>
+        <button type="button" class="btn--dark" id="applyFiltersBtn">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboardError" style="display:none"></div>
+</div>
+
+<!-- Existing shared reusable engine (unmodified). -->
+<script src="js/library.js"></script>
+<!-- Page controller: RNSP wiring, filter state, rendering. -->
+<script src="js/lease-asset-dashboard.js"></script>
+</body>
+</html>
