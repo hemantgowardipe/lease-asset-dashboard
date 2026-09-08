@@ -557,7 +557,7 @@
       asset: pickField(r, ['AssetName', 'LeaseAsset', 'Asset'], WORKFLOWS.renewals) || '',
       dept: pickField(r, ['Department'], WORKFLOWS.renewals) || '',
       location: pickField(r, ['Location'], WORKFLOWS.renewals) || '',
-      vendor: pickField(r, ['Vendor', 'Lessor'], WORKFLOWS.renewals) || '',
+      vendor: pickField(r, ['Lessor/Vendor', 'LessorVendor', 'Vendor', 'Lessor'], WORKFLOWS.renewals) || '',
       end: endDate || '',
       endTime: endDate ? new Date(endDate).getTime() : NaN,
       days: days,
