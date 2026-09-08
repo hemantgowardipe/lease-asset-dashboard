@@ -258,7 +258,7 @@
   // Everything else — AssetType/Category/Location/Department/
   // Vendor — is driven by the searchable-combobox fields below, ported
   // from Asset Value Dashboard's filter funnel.
-  var dateFilter = { rangeValue: '30', from: '', to: '' };
+  var dateFilter = { rangeValue: '90', from: '', to: '' };
 
   var FILTER_KEYS = ['AssetType', 'Category', 'Location', 'Department', 'Vendor'];
   var FILTER_FIELD_IDS = {
@@ -294,7 +294,7 @@
       var to = filter.to || toIsoDate(today);
       return { StartDate: from, EndDate: to };
     }
-    var days = parseInt(filter.rangeValue, 10) || 30;
+    var days = parseInt(filter.rangeValue, 10) || 90;
     var start = new Date(today);
     start.setDate(start.getDate() - days);
     return { StartDate: toIsoDate(start), EndDate: toIsoDate(today) };
@@ -1035,8 +1035,8 @@
         filterDropdownOptions.Category = getOptionsForFilterKey('Category');
         renderFilterDropdownMenu('Category');
 
-        dateFilter = { rangeValue: '30', from: '', to: '' };
-        document.getElementById('fDateRange').value = '30';
+        dateFilter = { rangeValue: '90', from: '', to: '' };
+        document.getElementById('fDateRange').value = '90';
         document.getElementById('fFrom').value = '';
         document.getElementById('fTo').value = '';
         document.getElementById('customDateFields').style.display = 'none';

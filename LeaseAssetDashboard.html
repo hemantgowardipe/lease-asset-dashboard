@@ -10,7 +10,7 @@
      but does not itself load the font file). -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
 
 <!-- Font Awesome — the .fa fa-filter / fa-angle-down icons used by the
      filter funnel are assumed to already be available globally in the
@@ -163,15 +163,15 @@
       <div class="as-filter-fields hmt-filter-fields">
 
         <!-- Date Range — kept as-is per spec (7 / 30 / 90 / Custom, never
-             "All"); default moved from 7 Days to 30 Days, the 7 Days option
-             itself is unchanged. Everything else in this popup is the
-             ported searchable-combobox contract. -->
+             "All"); default is 90 Days, the other options are unchanged.
+             Everything else in this popup is the ported searchable-
+             combobox contract. -->
         <label class="hmt-filter-field" data-filter-key="dateRange">
           <span>Date Range</span>
           <select id="fDateRange" class="as-filter-select">
             <option value="7">7 Days</option>
-            <option value="30" selected>30 Days</option>
-            <option value="90">90 Days</option>
+            <option value="30">30 Days</option>
+            <option value="90" selected>90 Days</option>
             <option value="custom">Custom</option>
           </select>
         </label>

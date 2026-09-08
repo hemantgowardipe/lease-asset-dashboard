@@ -126,7 +126,7 @@
 
 .lease-kpi-card__value {
   font-size: var(--font-size-display);
-  font-weight: var(--font-weight-regular);
+  font-weight: 300;
   line-height: 1.2;
   color: var(--color-text-primary);
   white-space: nowrap;
