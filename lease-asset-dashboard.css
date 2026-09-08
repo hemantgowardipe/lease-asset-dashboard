@@ -133,6 +133,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Loading state — ported verbatim from Asset Value Dashboard's own
+   .dash-loading / .dash-loading__dot / @keyframes dash-dot-pulse (that
+   component lives in asset_value_dashboard.css, not the shared global.css,
+   so it isn't something this page already had access to). Same three-dot
+   pulse, same timing/delays; var(--muted) there is var(--color-text-muted)
+   here, this project's equivalent token. */
+.dash-loading { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; min-height: 48px; padding: 12px 0; }
+.lease-kpi-card__value .dash-loading { min-height: 36px; padding: 4px 0; }
+.dash-loading__dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-muted); animation: dash-dot-pulse 1.2s ease-in-out infinite; }
+.dash-loading__dot:nth-child(1) { animation-delay: 0s; }
+.dash-loading__dot:nth-child(2) { animation-delay: 0.2s; }
+.dash-loading__dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dash-dot-pulse { 0%, 80%, 100% { transform: scale(0.75); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
 .lease-kpi-card__sub {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);

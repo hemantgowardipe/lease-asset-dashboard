@@ -42,6 +42,13 @@
   };
   var FILTER_VALUES_WORKFLOW = 'ASSET_VALUE_FILTER';
 
+  // Ported from Asset Value Dashboard's own LOADING_HTML/KPI_IDS/setLoading()
+  // — same markup, same ids-driven loop, same "only KPI values + the table"
+  // scope. Nothing here touches how/when the RNSP calls themselves fire.
+  var LEASE_LOADING_HTML =
+    '<div class="dash-loading"><span class="dash-loading__dot"></span><span class="dash-loading__dot"></span><span class="dash-loading__dot"></span></div>';
+  var KPI_VALUE_IDS = ['kpiTotal', 'kpiActive', 'kpiRenewals', 'kpiDue', 'kpiCost'];
+
   // ------------------------------------------------------------------
   // Base URL + auth (mirrors library.js's private getApiBaseUrl /
   // getAuthHeadersFromStorage — see file header note above).
@@ -318,6 +325,33 @@
   // ------------------------------------------------------------------
   // Rendering
   // ------------------------------------------------------------------
+
+  /**
+   * Shows/hides the three-dot pulse in every KPI card's value and the
+   * renewals table's wrap. For the table specifically: state.gridInstance
+   * is cleared before writing the loading markup over it, so ensureGrid()
+   * fully rebuilds a fresh table+GridTable instance once real rows arrive
+   * instead of trying to refresh() a table element the loading placeholder
+   * just replaced out from under it. Manually-resized column widths are
+   * unaffected either way — GridTable always re-reads its own saved widths
+   * from localStorage on creation, ahead of any declared default.
+   */
+  function setLeaseLoading(isLoading) {
+    KPI_VALUE_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el || !isLoading) return;
+      el.innerHTML = LEASE_LOADING_HTML;
+    });
+
+    var tableWrap = document.getElementById('renewalsGridWrap');
+    if (tableWrap && isLoading) {
+      state.gridInstance = null;
+      tableWrap.innerHTML = LEASE_LOADING_HTML;
+    }
+
+    var applyBtn = document.getElementById('filterFunnelApply');
+    if (applyBtn) applyBtn.disabled = isLoading;
+  }
 
   function showComponentError(containerEl, workflowName, err) {
     console.error('[lease-dashboard] ' + workflowName + ' failed:', err);
@@ -929,6 +963,7 @@
 
   async function loadDashboardData() {
     var args = buildArgs();
+    setLeaseLoading(true);
 
     var jobs = [
       { name: WORKFLOWS.summary, run: renderKpis, container: document.getElementById('kpiGrid') },
@@ -952,6 +987,8 @@
         .then(job.run)
         .catch(function (err) { showComponentError(job.container, job.name, err); });
     }));
+
+    setLeaseLoading(false);
   }
 
   // ------------------------------------------------------------------
